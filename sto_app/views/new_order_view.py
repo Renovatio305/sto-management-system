@@ -1170,6 +1170,7 @@ class NewOrderView(QWidget):
                 
         self.autosave_timer.stop()
         event.accept()
+      
     def refresh_services_table(self):
         """Обновление таблицы услуг из БД"""
         if not self.current_order or not self.current_order.id:
@@ -1211,3 +1212,107 @@ class NewOrderView(QWidget):
                 
         except Exception as e:
             logger.error(f"Ошибка обновления таблицы запчастей: {e}")
+
+def add_service_row_from_db(self, service):
+       """Добавление строки услуги из объекта БД"""
+       row = self.services_table.rowCount()
+       self.services_table.insertRow(row)
+       
+       # Заполняем данные из объекта OrderService
+       self.services_table.setItem(row, 0, QTableWidgetItem(service.service_name or "Услуга"))
+       
+       price_item = QTableWidgetItem(f'{float(service.price):.2f}')
+       price_item.setTextAlignment(Qt.AlignRight)
+       self.services_table.setItem(row, 1, price_item)
+       
+       # Цена с НДС
+       vat_price = float(service.price_with_vat or service.price * 1.2)
+       vat_item = QTableWidgetItem(f'{vat_price:.2f}')
+       vat_item.setTextAlignment(Qt.AlignRight)
+       self.services_table.setItem(row, 2, vat_item)
+       
+       # Кнопка удаления
+       delete_btn = QPushButton('🗑️')
+       delete_btn.setMaximumWidth(30)
+       delete_btn.clicked.connect(lambda: self.remove_service_from_db(service.id, row))
+       self.services_table.setCellWidget(row, 3, delete_btn)
+
+   def add_part_row_from_db(self, part):
+       """Добавление строки запчасти из объекта БД"""
+       row = self.parts_table.rowCount()
+       self.parts_table.insertRow(row)
+       
+       # Заполняем данные из объекта OrderPart
+       self.parts_table.setItem(row, 0, QTableWidgetItem(part.part_number or ""))
+       self.parts_table.setItem(row, 1, QTableWidgetItem(part.name))
+       
+       qty_item = QTableWidgetItem(str(part.quantity))
+       qty_item.setTextAlignment(Qt.AlignCenter)
+       self.parts_table.setItem(row, 2, qty_item)
+       
+       price_item = QTableWidgetItem(f'{float(part.unit_price):.2f}')
+       price_item.setTextAlignment(Qt.AlignRight)
+       self.parts_table.setItem(row, 3, price_item)
+       
+       total = float(part.unit_price) * part.quantity
+       total_item = QTableWidgetItem(f'{total:.2f}')
+       total_item.setTextAlignment(Qt.AlignRight)
+       self.parts_table.setItem(row, 4, total_item)
+       
+       # Кнопка удаления
+       delete_btn = QPushButton('🗑️')
+       delete_btn.setMaximumWidth(30)
+       delete_btn.clicked.connect(lambda: self.remove_part_from_db(part.id, row))
+       self.parts_table.setCellWidget(row, 5, delete_btn)
+
+   def remove_service_from_db(self, service_id, row):
+       """Удаление услуги из БД"""
+       reply = QMessageBox.question(
+           self, 'Подтверждение',
+           'Удалить выбранную услугу?',
+           QMessageBox.Yes | QMessageBox.No
+       )
+       
+       if reply == QMessageBox.Yes:
+           try:
+               # Удаляем из БД
+               service = self.db_session.get(OrderService, service_id)
+               if service:
+                   self.db_session.delete(service)
+                   self.db_session.commit()
+               
+               # Удаляем из таблицы
+               self.services_table.removeRow(row)
+               self.calculate_totals()
+               self.mark_unsaved_changes()
+               
+           except Exception as e:
+               self.db_session.rollback()
+               logger.error(f"Ошибка удаления услуги: {e}")
+               QMessageBox.critical(self, 'Ошибка', f'Не удалось удалить услугу: {e}')
+
+   def remove_part_from_db(self, part_id, row):
+       """Удаление запчасти из БД"""
+       reply = QMessageBox.question(
+           self, 'Подтверждение',
+           'Удалить выбранную запчасть?',
+           QMessageBox.Yes | QMessageBox.No
+       )
+       
+       if reply == QMessageBox.Yes:
+           try:
+               # Удаляем из БД
+               part = self.db_session.get(OrderPart, part_id)
+               if part:
+                   self.db_session.delete(part)
+                   self.db_session.commit()
+               
+               # Удаляем из таблицы
+               self.parts_table.removeRow(row)
+               self.calculate_totals()
+               self.mark_unsaved_changes()
+               
+           except Exception as e:
+               self.db_session.rollback()
+               logger.error(f"Ошибка удаления запчасти: {e}")
+               QMessageBox.critical(self, 'Ошибка', f'Не удалось удалить запчасть: {e}')
