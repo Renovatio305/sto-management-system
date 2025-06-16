@@ -61,19 +61,52 @@ class OrderService(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     order_id = Column(Integer, ForeignKey('orders.id'), nullable=False)
+    
+    # Основная информация об услуге
     service_name = Column(String(500), nullable=False)
     service_name_ua = Column(String(500))
+    
+    # Связи с каталогом и сотрудником
+    service_catalog_id = Column(Integer, ForeignKey('services_catalog.id'))  
+    employee_id = Column(Integer, ForeignKey('employees.id'))                
+    
+    # Параметры выполнения
+    quantity = Column(Integer, default=1)                             
+    duration_hours = Column(Float, default=1.0)                         
+    
+    # Ценообразование
     price = Column(Float, nullable=False)
     price_with_vat = Column(Float)
+    discount_amount = Column(Float, default=0.0)                            
+    discount_percent = Column(Float, default=0.0)                        
+    
+    # Статус и комментарии
+    is_completed = Column(Integer, default=0)                              
+    notes = Column(Text)                                                   
     
     # Отношения
     order = relationship("Order", back_populates="services")
+    service_catalog = relationship("ServiceCatalog")                        
+    employee = relationship("Employee")                                      
     
     def calculate_vat(self, vat_rate=0.2):
         """Рассчитать цену с НДС"""
         self.price_with_vat = self.price * (1 + vat_rate)
         return self.price_with_vat
-
+    
+    def calculate_total_with_discount(self):                               
+        """Рассчитать итоговую стоимость с учетом скидки"""
+        subtotal = self.price * self.quantity
+        
+        if self.discount_amount:
+            total = subtotal - self.discount_amount
+        elif self.discount_percent:
+            discount = subtotal * (self.discount_percent / 100)
+            total = subtotal - discount
+        else:
+            total = subtotal
+            
+        return max(total, 0)  # Не может быть отрицательной
 
 class OrderPart(Base):
     """Запчасти в заказе"""
