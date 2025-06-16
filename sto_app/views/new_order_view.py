@@ -421,8 +421,6 @@ class NewOrderView(QWidget):
         # Отслеживание изменений для автосохранения
         self.client_search_edit.textChanged.connect(self.on_client_search)
         self.car_search_edit.textChanged.connect(self.on_car_search)
-        self.service_search_edit.returnPressed.connect(self.add_service_from_search)
-        self.part_search_edit.returnPressed.connect(self.add_part_from_search)
         
         # Кнопки добавления
         self.new_client_btn.clicked.connect(self.new_client)
