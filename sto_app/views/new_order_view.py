@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
                               QFrame, QCheckBox, QCompleter, QProgressBar)
 from PySide6.QtCore import Qt, Signal, QDateTime, QStringListModel, QTimer
 from PySide6.QtGui import QFont, QIcon, QDoubleValidator, QIntValidator
+from sto_app.models_sto import OrderService, OrderPart
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from datetime import datetime
@@ -1169,3 +1170,44 @@ class NewOrderView(QWidget):
                 
         self.autosave_timer.stop()
         event.accept()
+    def refresh_services_table(self):
+        """Обновление таблицы услуг из БД"""
+        if not self.current_order or not self.current_order.id:
+            return
+            
+        try:
+            # Загружаем услуги из БД
+            services = self.db_session.query(OrderService).filter(
+                OrderService.order_id == self.current_order.id
+            ).all()
+            
+            # Очищаем таблицу
+            self.services_table.setRowCount(0)
+            
+            # Заполняем таблицу
+            for service in services:
+                self.add_service_row_from_db(service)
+                
+        except Exception as e:
+            logger.error(f"Ошибка обновления таблицы услуг: {e}")
+
+    def refresh_parts_table(self):
+        """Обновление таблицы запчастей из БД"""
+        if not self.current_order or not self.current_order.id:
+            return
+            
+        try:
+            # Загружаем запчасти из БД
+            parts = self.db_session.query(OrderPart).filter(
+                OrderPart.order_id == self.current_order.id
+            ).all()
+            
+            # Очищаем таблицу
+            self.parts_table.setRowCount(0)
+            
+            # Заполняем таблицу
+            for part in parts:
+                self.add_part_row_from_db(part)
+                
+        except Exception as e:
+            logger.error(f"Ошибка обновления таблицы запчастей: {e}")
