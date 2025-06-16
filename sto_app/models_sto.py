@@ -114,12 +114,18 @@ class OrderPart(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     order_id = Column(Integer, ForeignKey('orders.id'), nullable=False)
-    article = Column(String(100))
-    part_name = Column(String(500), nullable=False)
-    part_name_ua = Column(String(500))
-    unit = Column(String(20), default='шт')
-    price = Column(Float, nullable=False)
+    
+    # Идентификация запчасти
+    part_number = Column(String(100))       
+    name = Column(String(500), nullable=False) 
+    name_ua = Column(String(500))            
+    
+    # Количество и единицы
     quantity = Column(Float, nullable=False)
+    unit = Column(String(20), default='шт')
+    
+    # Ценообразование
+    unit_price = Column(Float, nullable=False)  
     total = Column(Float)
     
     # Отношения
@@ -127,7 +133,7 @@ class OrderPart(Base):
     
     def calculate_total(self):
         """Рассчитать общую стоимость"""
-        self.total = self.price * self.quantity
+        self.total = self.unit_price * self.quantity
         return self.total
 
 
