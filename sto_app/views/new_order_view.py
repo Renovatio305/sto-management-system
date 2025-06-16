@@ -603,38 +603,32 @@ class NewOrderView(QWidget):
             self.car_search_edit.setText(car.vin or car.license_plate or '')
             self.selected_car = car
             
-    def add_service_from_search(self):
-        """Добавление услуги из поиска"""
-        service_name = self.service_search_edit.text().strip()
-        if not service_name:
-            return
-            
-        try:
-            # Ищем услугу в каталоге
-            service = self.db_session.query(ServiceCatalog).filter(
-                ServiceCatalog.name.ilike(f'%{service_name}%')
-            ).first()
-            
-            if service:
-                self.add_service_to_table(service.name, service.price)
-                self.service_search_edit.clear()
-            else:
-                # Добавляем как пользовательскую услугу
-                dialog = ServiceDialog(self, service_name)
-                if dialog.exec():
-                    name, price = dialog.get_service_data()
-                    self.add_service_to_table(name, price)
-                    self.service_search_edit.clear()
-                    
-        except Exception as e:
-            logger.error(f"Ошибка добавления услуги: {e}")
             
     def add_service(self):
-        """Добавление услуги через диалог"""
-        dialog = ServiceDialog(self)
-        if dialog.exec():
-            name, price = dialog.get_service_data()
-            self.add_service_to_table(name, price)
+    """Добавление услуги через диалог"""
+    if not self.current_order:
+        # Создаем временный заказ для передачи order_id
+        reply = QMessageBox.question(
+            self, 'Создание заказа',
+            'Для добавления услуг необходимо сначала сохранить заказ как черновик. Продолжить?',
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            if not self.save_draft():
+                return
+        else:
+            return
+
+    dialog = ServiceDialog(self, order_id=self.current_order.id)
+    dialog.service_cost_changed.connect(self.calculate_totals)
+    
+    if dialog.exec() == QDialog.DialogCode.Accepted:
+        order_service = dialog.get_order_service()
+        if order_service:
+            # Обновляем таблицу услуг
+            self.refresh_services_table()
+            self.calculate_totals()
+            self.mark_unsaved_changes()
             
     def add_service_to_table(self, name, price):
         """Добавление услуги в таблицу"""
@@ -664,25 +658,31 @@ class NewOrderView(QWidget):
         
         self.calculate_totals()
         self.mark_unsaved_changes()
-        
-    def add_part_from_search(self):
-        """Добавление запчасти из поиска"""
-        part_name = self.part_search_edit.text().strip()
-        if not part_name:
-            return
-            
-        dialog = PartDialog(self, part_name)
-        if dialog.exec():
-            article, name, quantity, price = dialog.get_part_data()
-            self.add_part_to_table(article, name, quantity, price)
-            self.part_search_edit.clear()
             
     def add_part(self):
-        """Добавление запчасти через диалог"""
-        dialog = PartDialog(self)
-        if dialog.exec():
-            article, name, quantity, price = dialog.get_part_data()
-            self.add_part_to_table(article, name, quantity, price)
+    """Добавление запчасти через диалог"""
+    if not self.current_order:
+        reply = QMessageBox.question(
+            self, 'Создание заказа',
+            'Для добавления запчастей необходимо сначала сохранить заказ как черновик. Продолжить?',
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            if not self.save_draft():
+                return
+        else:
+            return
+
+    dialog = PartDialog(self, order_id=self.current_order.id)
+    dialog.part_cost_changed.connect(self.calculate_totals)
+    
+    if dialog.exec() == QDialog.DialogCode.Accepted:
+        order_part = dialog.get_order_part()
+        if order_part:
+            # Обновляем таблицу запчастей
+            self.refresh_parts_table()
+            self.calculate_totals()
+            self.mark_unsaved_changes()
             
     def add_part_to_table(self, article, name, quantity, price):
         """Добавление запчасти в таблицу"""
