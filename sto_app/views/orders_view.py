@@ -497,7 +497,12 @@ class OrdersView(QWidget):
                 return
                 
             dialog = OrderDetailsDialog(self, order_id=order_id, read_only=False)
-            
+            if dialog.exec():
+                self.refresh_orders()
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть редактирование заказа: {e}")
+              
     def start_work(self):
         """Начать работу по заказу"""
         order = self.get_selected_order()
@@ -578,6 +583,21 @@ class OrdersView(QWidget):
         order = self.get_selected_order()
         if not order:
             return
+            
+        # Формируем строку с данными заказа
+        data = f"""Заказ: {order.order_number}
+Дата: {order.date_received.strftime('%d.%m.%Y') if order.date_received else ''}
+Клиент: {order.client.name if order.client else ''}
+Автомобиль: {order.car.full_name if order.car else ''}
+VIN: {order.car.vin if order.car else ''}
+Статус: {order.status.value if order.status else ''}
+Сумма: {order.total_amount:.2f} ₴
+Остаток: {order.balance_due:.2f} ₴"""
+        
+        from PySide6.QtGui import QClipboard
+        clipboard = QClipboard()
+        clipboard.setText(data)
+        self.status_message.emit('Данные заказа скопированы в буфер обмена', 2000)
 
     def get_order_id_from_row(self, row):
         """Получить ID заказа из строки таблицы"""
@@ -602,18 +622,3 @@ class OrdersView(QWidget):
         except Exception as e:
             logger.error(f"Ошибка получения ID заказа: {e}")
             return None
-            
-        # Формируем строку с данными заказа
-        data = f"""Заказ: {order.order_number}
-Дата: {order.date_received.strftime('%d.%m.%Y') if order.date_received else ''}
-Клиент: {order.client.name if order.client else ''}
-Автомобиль: {order.car.full_name if order.car else ''}
-VIN: {order.car.vin if order.car else ''}
-Статус: {order.status.value if order.status else ''}
-Сумма: {order.total_amount:.2f} ₴
-Остаток: {order.balance_due:.2f} ₴"""
-        
-        from PySide6.QtGui import QClipboard
-        clipboard = QClipboard()
-        clipboard.setText(data)
-        self.status_message.emit('Данные заказа скопированы в буфер обмена', 2000)
