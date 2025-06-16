@@ -68,6 +68,10 @@ class OrdersTableModel(QAbstractTableModel):
                 return f"{order.balance_due:.2f} ₴" if order.balance_due else '0.00 ₴'
             elif col == 8:  # Ответственный
                 return order.responsible_person.name if order.responsible_person else ''
+
+        elif role == Qt.UserRole:
+            # Сохраняем ID заказа для доступа из views
+            return order.id      
                 
         elif role == Qt.BackgroundRole:
             # Цветовая индикация статусов
@@ -363,7 +367,7 @@ class OrdersView(QWidget):
         menu = QMenu(self)
         
         view_action = QAction(QIcon('resources/icons/view.png'), 'Просмотр', self)
-        view_action.triggered.connect(self.view_order)
+        view_action.triggered.connect(self.view_order_details)
         menu.addAction(view_action)
         
         edit_action = QAction(QIcon('resources/icons/edit.png'), 'Редактировать', self)
