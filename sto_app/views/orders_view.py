@@ -13,7 +13,6 @@ import logging
 
 from shared_models.common_models import Client, Car
 from sto_app.models_sto import Order, OrderStatus
-from sto_app.dialogs.order_details_dialog import OrderDetailsDialog
 
 
 logger = logging.getLogger(__name__)
