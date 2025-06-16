@@ -606,8 +606,8 @@ class NewOrderView(QWidget):
             
             
     def add_service(self):
-    """Добавление услуги через диалог"""
-    if not self.current_order:
+        """Добавление услуги через диалог"""
+        if not self.current_order:
         # Создаем временный заказ для передачи order_id
         reply = QMessageBox.question(
             self, 'Создание заказа',
@@ -661,29 +661,29 @@ class NewOrderView(QWidget):
         self.mark_unsaved_changes()
             
     def add_part(self):
-    """Добавление запчасти через диалог"""
-    if not self.current_order:
-        reply = QMessageBox.question(
-            self, 'Создание заказа',
-            'Для добавления запчастей необходимо сначала сохранить заказ как черновик. Продолжить?',
-            QMessageBox.Yes | QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
-            if not self.save_draft():
+        """Добавление запчасти через диалог"""
+        if not self.current_order:
+            reply = QMessageBox.question(
+                self, 'Создание заказа',
+                'Для добавления запчастей необходимо сначала сохранить заказ как черновик. Продолжить?',
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                if not self.save_draft():
+                    return
+            else:
                 return
-        else:
-            return
 
-    dialog = PartDialog(self, order_id=self.current_order.id)
-    dialog.part_cost_changed.connect(self.calculate_totals)
-    
-    if dialog.exec() == QDialog.DialogCode.Accepted:
-        order_part = dialog.get_order_part()
-        if order_part:
-            # Обновляем таблицу запчастей
-            self.refresh_parts_table()
-            self.calculate_totals()
-            self.mark_unsaved_changes()
+        dialog = PartDialog(self, order_id=self.current_order.id)
+        dialog.part_cost_changed.connect(self.calculate_totals)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            order_part = dialog.get_order_part()
+            if order_part:
+                # Обновляем таблицу запчастей
+                self.refresh_parts_table()
+                self.calculate_totals()
+                self.mark_unsaved_changes()
             
     def add_part_to_table(self, article, name, quantity, price):
         """Добавление запчасти в таблицу"""
