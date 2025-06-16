@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableView,
                               QGroupBox, QDateEdit, QCheckBox)
 from PySide6.QtCore import Qt, Signal, QAbstractTableModel, QModelIndex, QSortFilterProxyModel, QDate
 from PySide6.QtGui import QAction, QIcon, QFont, QColor, QPalette
+from sto_app.dialogs.order_details_dialog import OrderDetailsDialog
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, desc
 from datetime import datetime, timedelta
@@ -338,7 +339,7 @@ class OrdersView(QWidget):
         actions_layout.addWidget(edit_order_btn)
         
         view_order_btn = QPushButton('👁️ Просмотр')
-        view_order_btn.clicked.connect(self.view_order)
+        view_order_btn.clicked.connect(self.view_order_details)
         actions_layout.addWidget(view_order_btn)
         
         actions_layout.addStretch()
@@ -459,26 +460,40 @@ class OrdersView(QWidget):
         # Сигнал будет перехвачен главным окном для переключения на вкладку
         self.status_message.emit('Переход к созданию нового заказа', 1000)
         
-    def view_order(self):
-        """Просмотр заказа"""
-        order = self.get_selected_order()
-        if not order:
-            QMessageBox.information(self, 'Информация', 'Выберите заказ для просмотра')
+    def view_order_details(self):
+        """Просмотр полных деталей выбранного заказа"""
+        current_row = self.orders_table.currentRow()
+        if current_row < 0:
+            QMessageBox.information(self, "Информация", "Выберите заказ для просмотра")
             return
+        
+        try:
+            order_id = self.get_order_id_from_row(current_row)
             
-        dialog = OrderDetailsDialog(self, order, read_only=True)
-        dialog.exec()
+            if not order_id:
+                QMessageBox.warning(self, "Предупреждение", "Не удалось определить ID заказа")
+                return
+                
+            dialog = OrderDetailsDialog(self, order_id=order_id)
+            dialog.exec()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось открыть детали заказа: {e}")
         
     def edit_order(self):
         """Редактирование заказа"""
-        order = self.get_selected_order()
-        if not order:
+        current_row = self.orders_table.currentRow()
+        if current_row < 0:
             QMessageBox.information(self, 'Информация', 'Выберите заказ для редактирования')
             return
-            
-        dialog = OrderDetailsDialog(self, order, read_only=False)
-        if dialog.exec():
-            self.refresh_orders()
+        
+        try:
+            order_id = self.get_order_id_from_row(current_row)
+            if not order_id:
+                QMessageBox.warning(self, "Предупреждение", "Не удалось определить ID заказа")
+                return
+                
+            dialog = OrderDetailsDialog(self, order_id=order_id, read_only=False)
             
     def start_work(self):
         """Начать работу по заказу"""
@@ -560,6 +575,30 @@ class OrdersView(QWidget):
         order = self.get_selected_order()
         if not order:
             return
+
+    def get_order_id_from_row(self, row):
+        """Получить ID заказа из строки таблицы"""
+        try:
+            # Пытаемся получить ID из UserRole
+            for col in range(self.orders_table.columnCount()):
+                item = self.orders_table.item(row, col)
+                if item and item.data(Qt.UserRole):
+                    return int(item.data(Qt.UserRole))
+            
+            # Если не найден, ищем по номеру заказа
+            order_number_item = self.orders_table.item(row, 0)
+            if order_number_item:
+                order_number = order_number_item.text()
+                from sqlalchemy import select
+                from sto_app.models_sto import Order
+                
+                stmt = select(Order.id).where(Order.order_number == order_number)
+                result = self.db_session.execute(stmt)
+                return result.scalar_one_or_none()
+                
+        except Exception as e:
+            logger.error(f"Ошибка получения ID заказа: {e}")
+            return None
             
         # Формируем строку с данными заказа
         data = f"""Заказ: {order.order_number}
