@@ -11,6 +11,7 @@ import sys
 import os
 import logging
 from pathlib import Path
+from PySide6.QtCore import Qt
 
 # Добавляем текущую директорию в путь
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
