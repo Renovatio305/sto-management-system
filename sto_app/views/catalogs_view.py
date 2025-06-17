@@ -612,7 +612,7 @@ class CatalogsView(QWidget):
                 self.employees_table.setItem(row, 1, QTableWidgetItem(full_name))
                 
                 # Должность
-                self.employees_table.setItem(row, 2, QTableWidgetItem(employee.position or ""))
+                self.employees_table.setItem(row, 2, QTableWidgetItem(employee.role or ""))
                 
                 # Отдел
                 department = ""
