@@ -197,15 +197,23 @@ class MainWindow(QMainWindow):
         # Главный layout
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(5, 5, 5, 5)
-        main_layout.setSpacing(5)
         
         # Меню
         self.create_menu_bar()
         
-        # Убираем верхнюю панель быстрых действий - переносим все в табы
+        # Убираем тулбар - не нужен
+        # self.create_toolbar()
         
-        # Создаем кастомный виджет вкладок
-        self.tab_widget = CustomTabWidget(self)
+        # Контейнер для табов с кнопками
+        tabs_container = QWidget()
+        tabs_layout = QHBoxLayout(tabs_container)
+        tabs_layout.setContentsMargins(0, 0, 0, 0)
+        tabs_layout.setSpacing(5)
+        
+        # Вкладки (основная часть)
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setTabPosition(QTabWidget.TabPosition.North)
+        self.tab_widget.setMovable(False)
         
         # Создаем вкладки
         self.orders_view = OrdersView(self.db_session)
@@ -213,19 +221,22 @@ class MainWindow(QMainWindow):
         self.catalogs_view = CatalogsView(self.db_session)
         self.settings_view = SettingsView()
         
-        # Добавляем ВСЕ вкладки включая "Новый заказ"
+        # Добавляем вкладки
         self.tab_widget.addTab(self.orders_view, '📋 Заказы')
-        self.tab_widget.addTab(self.new_order_view, '➕ Новый заказ')  # ОСТАВЛЯЕМ!
-        self.tab_widget.addTab(self.catalogs_view, '📚 Справочники') 
+        self.tab_widget.addTab(self.new_order_view, '➕ Новый заказ')
+        self.tab_widget.addTab(self.catalogs_view, '📚 Справочники')
         self.tab_widget.addTab(self.settings_view, '⚙️ Настройки')
         
-        main_layout.addWidget(self.tab_widget)
+        tabs_layout.addWidget(self.tab_widget)
+        
+        # Правая панель с быстрыми действиями
+        self.create_quick_actions_panel()
+        tabs_layout.addWidget(self.quick_actions_widget)
+        
+        main_layout.addWidget(tabs_container)
         
         # Статусная строка
         self.create_status_bar()
-        
-        # Стилизация табов
-        self.style_tabs()
         
     def style_tabs(self):
         """Стилизация вкладок"""
@@ -373,6 +384,72 @@ class MainWindow(QMainWindow):
         self.time_timer.timeout.connect(self.update_time)
         self.time_timer.start(1000)
         
+    def create_quick_actions_panel(self):
+        """Создание панели быстрых действий справа от табов"""
+        self.quick_actions_widget = QWidget()
+        self.quick_actions_widget.setMaximumWidth(200)
+        self.quick_actions_widget.setMinimumWidth(180)
+        
+        layout = QHBoxLayout(self.quick_actions_widget)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(3)
+        
+        # Стиль для компактных кнопок
+        button_style = """
+            QPushButton {
+                background-color: {color};
+                color: white;
+                font-weight: bold;
+                padding: 6px 10px;
+                border-radius: 3px;
+                border: none;
+                font-size: 11px;
+                min-width: 32px;
+                max-width: 32px;
+                min-height: 28px;
+                max-height: 28px;
+            }
+            QPushButton:hover {
+                background-color: {hover_color};
+            }
+            QPushButton:disabled {
+                background-color: #95a5a6;
+                color: #7f8c8d;
+            }
+        """
+        
+        # Поиск
+        self.search_btn = QPushButton("🔍")
+        self.search_btn.setStyleSheet(button_style.format(color="#9b59b6", hover_color="#af7ac5"))
+        self.search_btn.setToolTip("Поиск (Ctrl+F)")
+        layout.addWidget(self.search_btn)
+        
+        # Календарь
+        self.calendar_btn = QPushButton("📅")
+        self.calendar_btn.setStyleSheet(button_style.format(color="#3498db", hover_color="#5dade2"))
+        self.calendar_btn.setToolTip("Календарь (Ctrl+K)")
+        layout.addWidget(self.calendar_btn)
+        
+        # Отчёты
+        self.reports_btn = QPushButton("📊")
+        self.reports_btn.setStyleSheet(button_style.format(color="#e67e22", hover_color="#f39c12"))
+        self.reports_btn.setToolTip("Отчёты (Ctrl+R)")
+        layout.addWidget(self.reports_btn)
+        
+        # Печать
+        self.print_btn = QPushButton("🖨️")
+        self.print_btn.setStyleSheet(button_style.format(color="#34495e", hover_color="#5d6d7e"))
+        self.print_btn.setToolTip("Печать")
+        layout.addWidget(self.print_btn)
+        
+        # PDF
+        self.pdf_btn = QPushButton("📄")
+        self.pdf_btn.setStyleSheet(button_style.format(color="#c0392b", hover_color="#e74c3c"))
+        self.pdf_btn.setToolTip("Экспорт в PDF")
+        layout.addWidget(self.pdf_btn)
+        
+        layout.addStretch()        
+        
     def update_time(self):
         """Обновление времени в статусной строке"""
         current_time = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
@@ -400,6 +477,13 @@ class MainWindow(QMainWindow):
             self.tab_widget.salary_btn.clicked.connect(self.manage_salary)
         if hasattr(self.tab_widget, 'clients_btn'):
             self.tab_widget.clients_btn.clicked.connect(self.show_all_clients)
+            
+         # Подключаем кнопки быстрых действий
+        self.search_btn.clicked.connect(self.show_search)
+        self.calendar_btn.clicked.connect(self.show_calendar)
+        self.reports_btn.clicked.connect(self.show_reports)
+        self.print_btn.clicked.connect(self.print_current)
+        self.pdf_btn.clicked.connect(self.export_pdf)           
         
     def show_status_message(self, message, timeout=3000):
         """Показать сообщение в статусной строке"""
@@ -413,22 +497,25 @@ class MainWindow(QMainWindow):
     def show_search(self):
         """Показать диалог поиска"""
         try:
+            from .dialogs.search_dialog import SearchDialog
             dialog = SearchDialog(self, self.db_session)
             dialog.exec()
         except Exception as e:
             QMessageBox.information(self, 'Поиск', f'Функция поиска в разработке\n{str(e)}')
-        
+
     def show_calendar(self):
         """Показать календарь записей"""
         try:
-            dialog = CalendarDialog(self, self.db_session)
+            from .dialogs.calendar_dialog import CalendarDialog
+            dialog = CalendarDialog(self.db_session, self)
             dialog.exec()
         except Exception as e:
             QMessageBox.information(self, 'Календарь', f'Календарь в разработке\n{str(e)}')
-        
+
     def show_reports(self):
         """Показать окно отчетов"""
         try:
+            from .dialogs.reports_dialog import ReportsDialog
             dialog = ReportsDialog(self.db_session, self)
             dialog.exec()
         except Exception as e:

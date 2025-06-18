@@ -82,7 +82,7 @@ class NewOrderView(QWidget):
         self.main_splitter.addWidget(self.order_info_widget)
         self.main_splitter.addWidget(self.services_parts_widget)
         
-        # Устанавливаем пропорции (40% верх, 60% низ)
+        # Устанавливаем пропорции (50% верх, 50% низ)
         self.main_splitter.setSizes([400, 600])
         
         # Стилизуем сплиттер
@@ -278,7 +278,7 @@ class NewOrderView(QWidget):
         self.parts_table = QTableWidget()
         self.parts_table.setColumnCount(5)
         self.parts_table.setHorizontalHeaderLabels([
-            "Запчасть", "Артикул", "Количество", "Цена за ед.", "Итого"
+            "Артикул", "Запчасть", "Количество", "Цена за ед.", "Итого"
         ])
         
         # Настройка таблицы
@@ -302,13 +302,13 @@ class NewOrderView(QWidget):
         
         # Стоимость услуг
         group_layout.addWidget(QLabel("Услуги:"), 0, 0)
-        self.services_total_label = QLabel("0.00 ₽")
+        self.services_total_label = QLabel("0.00 ₴")
         self.services_total_label.setStyleSheet("font-weight: bold; color: #27ae60;")
         group_layout.addWidget(self.services_total_label, 0, 1)
         
         # Стоимость запчастей
         group_layout.addWidget(QLabel("Запчасти:"), 1, 0)
-        self.parts_total_label = QLabel("0.00 ₽")
+        self.parts_total_label = QLabel("0.00 ₴")
         self.parts_total_label.setStyleSheet("font-weight: bold; color: #3498db;")
         group_layout.addWidget(self.parts_total_label, 1, 1)
         
@@ -327,9 +327,22 @@ class NewOrderView(QWidget):
         
         # Общая сумма
         group_layout.addWidget(QLabel("ИТОГО:"), 4, 0)
-        self.total_label = QLabel("0.00 ₽")
+        self.total_label = QLabel("0.00 ₴")
         self.total_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #e74c3c;")
         group_layout.addWidget(self.total_label, 4, 1)
+        
+                # Предоплата
+        group_layout.addWidget(QLabel("Предоплата:"), 5, 0)
+        self.prepayment_input = QDoubleSpinBox()
+        self.prepayment_input.setRange(0, 999999)
+        self.prepayment_input.setSuffix(" ₴")
+        group_layout.addWidget(self.prepayment_input, 5, 1)
+        
+        # К доплате
+        group_layout.addWidget(QLabel("К доплате:"), 6, 0)
+        self.balance_label = QLabel("0.00 ₴")
+        self.balance_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #e74c3c;")
+        group_layout.addWidget(self.balance_label, 6, 1)
         
         totals_layout.addWidget(totals_group)
         totals_layout.addStretch()
@@ -341,14 +354,14 @@ class NewOrderView(QWidget):
         layout.setContentsMargins(0, 10, 0, 0)
         
         # Кнопка очистки
-        self.clear_btn = QPushButton("🗑️ Очистить форму")
+        self.clear_btn = QPushButton("🗑️ Очистить")
         self.clear_btn.setStyleSheet("""
             QPushButton {
                 background-color: #f39c12;
                 color: white;
                 font-weight: bold;
-                padding: 12px 25px;
-                border-radius: 6px;
+                padding: 8px 16px;
+                border-radius: 4px;
             }
             QPushButton:hover {
                 background-color: #e67e22;
@@ -356,14 +369,14 @@ class NewOrderView(QWidget):
         """)
         
         # Кнопка сохранения черновика
-        self.save_draft_btn = QPushButton("💾 Сохранить черновик")
+        self.save_draft_btn = QPushButton("💾 Черновик")
         self.save_draft_btn.setStyleSheet("""
             QPushButton {
                 background-color: #95a5a6;
                 color: white;
                 font-weight: bold;
-                padding: 12px 25px;
-                border-radius: 6px;
+                padding: 8px 16px;
+                border-radius: 4px;
             }
             QPushButton:hover {
                 background-color: #7f8c8d;
@@ -371,15 +384,14 @@ class NewOrderView(QWidget):
         """)
         
         # Кнопка сохранения
-        self.save_btn = QPushButton("💾 Сохранить заказ")
+        self.save_btn = QPushButton("💾 Сохранить")
         self.save_btn.setStyleSheet("""
             QPushButton {
                 background-color: #27ae60;
                 color: white;
                 font-weight: bold;
-                padding: 12px 25px;
-                border-radius: 6px;
-                font-size: 14px;
+                padding: 8px 16px;
+                border-radius: 4px;
             }
             QPushButton:hover {
                 background-color: #2ecc71;
@@ -413,6 +425,7 @@ class NewOrderView(QWidget):
         
         # Расчеты
         self.discount_input.valueChanged.connect(self.calculate_totals)
+        self.prepayment_input.valueChanged.connect(self.calculate_totals)
         
         # Управляющие кнопки
         self.save_btn.clicked.connect(self.save_order)
@@ -536,6 +549,7 @@ class NewOrderView(QWidget):
     def create_new_car(self):
         """Создание нового автомобиля"""
         if not self.selected_client:
+            QMessageBox.information(self, "Информация", "Сначала выберите клиента")
             return
         
         dialog = CarDialog(parent=self, client_id=self.selected_client.id)
@@ -625,7 +639,7 @@ class NewOrderView(QWidget):
             
             for row, service in enumerate(services):
                 self.services_table.setItem(row, 0, QTableWidgetItem(service.service_name or ''))
-                self.services_table.setItem(row, 1, QTableWidgetItem(f"{service.price:.2f} ₽"))
+                self.services_table.setItem(row, 1, QTableWidgetItem(f"{service.price:.2f} ₴"))
                 self.services_table.setItem(row, 2, QTableWidgetItem(""))  # Мастер
                 self.services_table.setItem(row, 3, QTableWidgetItem("Ожидает"))  # Статус
         except Exception as e:
@@ -645,7 +659,7 @@ class NewOrderView(QWidget):
                 self.parts_table.setItem(row, 0, QTableWidgetItem(part.part_name or ''))
                 self.parts_table.setItem(row, 1, QTableWidgetItem(part.article or ''))
                 self.parts_table.setItem(row, 2, QTableWidgetItem(str(part.quantity)))
-                self.parts_table.setItem(row, 3, QTableWidgetItem(f"{part.price:.2f} ₽"))
+                self.parts_table.setItem(row, 3, QTableWidgetItem(f"{part.price:.2f} ₴"))
                 
         except Exception as e:
             self.logger.error(f"Ошибка обновления таблицы запчастей: {e}")
@@ -661,7 +675,7 @@ class NewOrderView(QWidget):
             except:
                 pass
         
-        self.services_total_label.setText(f"{services_total:.2f} ₽")
+        self.services_total_label.setText(f"{services_total:.2f} ₴")
         
         # Сумма запчастей
         parts_total = 0.0
@@ -672,7 +686,7 @@ class NewOrderView(QWidget):
             except:
                 pass
         
-        self.parts_total_label.setText(f"{parts_total:.2f} ₽")
+        self.parts_total_label.setText(f"{parts_total:.2f} ₴")
         
         # Общая сумма до скидки
         subtotal = services_total + parts_total
@@ -682,7 +696,21 @@ class NewOrderView(QWidget):
         discount_amount = subtotal * (discount_percent / 100)
         total = subtotal - discount_amount
         
-        self.total_label.setText(f"{total:.2f} ₽")
+        self.total_label.setText(f"{total:.2f} ₴")
+        
+                # К доплате
+        prepayment = self.prepayment_input.value()
+        balance = total - prepayment
+        
+        if balance > 0:
+            self.balance_label.setText(f"{balance:.2f} ₴")
+            self.balance_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #e74c3c;")
+        elif balance < 0:
+            self.balance_label.setText(f"Переплата: {abs(balance):.2f} ₴")
+            self.balance_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #ff9800;")
+        else:
+            self.balance_label.setText("Оплачено полностью")
+            self.balance_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #4caf50;")
         
         # Проверяем валидность формы
         self.check_form_validity()
