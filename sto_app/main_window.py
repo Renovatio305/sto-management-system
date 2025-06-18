@@ -384,71 +384,152 @@ class MainWindow(QMainWindow):
         self.time_timer.timeout.connect(self.update_time)
         self.time_timer.start(1000)
         
-    def create_quick_actions_panel(self):
-        """Создание панели быстрых действий справа от табов"""
-        self.quick_actions_widget = QWidget()
-        self.quick_actions_widget.setMaximumWidth(200)
-        self.quick_actions_widget.setMinimumWidth(180)
-        
-        layout = QHBoxLayout(self.quick_actions_widget)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(3)
-        
-        # Стиль для компактных кнопок
-        button_style = """
-            QPushButton {
-                background-color: {color};
-                color: white;
-                font-weight: bold;
-                padding: 6px 10px;
-                border-radius: 3px;
-                border: none;
-                font-size: 11px;
-                min-width: 32px;
-                max-width: 32px;
-                min-height: 28px;
-                max-height: 28px;
-            }
-            QPushButton:hover {
-                background-color: {hover_color};
-            }
-            QPushButton:disabled {
-                background-color: #95a5a6;
-                color: #7f8c8d;
-            }
-        """
-        
-        # Поиск
-        self.search_btn = QPushButton("🔍")
-        self.search_btn.setStyleSheet(button_style.format(color="#9b59b6", hover_color="#af7ac5"))
-        self.search_btn.setToolTip("Поиск (Ctrl+F)")
-        layout.addWidget(self.search_btn)
-        
-        # Календарь
-        self.calendar_btn = QPushButton("📅")
-        self.calendar_btn.setStyleSheet(button_style.format(color="#3498db", hover_color="#5dade2"))
-        self.calendar_btn.setToolTip("Календарь (Ctrl+K)")
-        layout.addWidget(self.calendar_btn)
-        
-        # Отчёты
-        self.reports_btn = QPushButton("📊")
-        self.reports_btn.setStyleSheet(button_style.format(color="#e67e22", hover_color="#f39c12"))
-        self.reports_btn.setToolTip("Отчёты (Ctrl+R)")
-        layout.addWidget(self.reports_btn)
-        
-        # Печать
-        self.print_btn = QPushButton("🖨️")
-        self.print_btn.setStyleSheet(button_style.format(color="#34495e", hover_color="#5d6d7e"))
-        self.print_btn.setToolTip("Печать")
-        layout.addWidget(self.print_btn)
-        
-        # PDF
-        self.pdf_btn = QPushButton("📄")
-        self.pdf_btn.setStyleSheet(button_style.format(color="#c0392b", hover_color="#e74c3c"))
-        self.pdf_btn.setToolTip("Экспорт в PDF")
-        layout.addWidget(self.pdf_btn)
-        
-        layout.addStretch()        
+def create_quick_actions_panel(self):
+    """Создание панели быстрых действий справа от табов"""
+    self.quick_actions_widget = QWidget()
+    self.quick_actions_widget.setMaximumWidth(200)
+    self.quick_actions_widget.setMinimumWidth(180)
+    
+    layout = QHBoxLayout(self.quick_actions_widget)
+    layout.setContentsMargins(5, 5, 5, 5)
+    layout.setSpacing(3)
+    
+    # Поиск
+    self.search_btn = QPushButton("🔍")
+    self.search_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #9b59b6;
+            color: white;
+            font-weight: bold;
+            padding: 6px 10px;
+            border-radius: 3px;
+            border: none;
+            font-size: 11px;
+            min-width: 32px;
+            max-width: 32px;
+            min-height: 28px;
+            max-height: 28px;
+        }
+        QPushButton:hover {
+            background-color: #af7ac5;
+        }
+        QPushButton:disabled {
+            background-color: #95a5a6;
+            color: #7f8c8d;
+        }
+    """)
+    self.search_btn.setToolTip("Поиск (Ctrl+F)")
+    layout.addWidget(self.search_btn)
+    
+    # Календарь
+    self.calendar_btn = QPushButton("📅")
+    self.calendar_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+            padding: 6px 10px;
+            border-radius: 3px;
+            border: none;
+            font-size: 11px;
+            min-width: 32px;
+            max-width: 32px;
+            min-height: 28px;
+            max-height: 28px;
+        }
+        QPushButton:hover {
+            background-color: #5dade2;
+        }
+        QPushButton:disabled {
+            background-color: #95a5a6;
+            color: #7f8c8d;
+        }
+    """)
+    self.calendar_btn.setToolTip("Календарь (Ctrl+K)")
+    layout.addWidget(self.calendar_btn)
+    
+    # Отчёты
+    self.reports_btn = QPushButton("📊")
+    self.reports_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #e67e22;
+            color: white;
+            font-weight: bold;
+            padding: 6px 10px;
+            border-radius: 3px;
+            border: none;
+            font-size: 11px;
+            min-width: 32px;
+            max-width: 32px;
+            min-height: 28px;
+            max-height: 28px;
+        }
+        QPushButton:hover {
+            background-color: #f39c12;
+        }
+        QPushButton:disabled {
+            background-color: #95a5a6;
+            color: #7f8c8d;
+        }
+    """)
+    self.reports_btn.setToolTip("Отчёты (Ctrl+R)")
+    layout.addWidget(self.reports_btn)
+    
+    # Печать
+    self.print_btn = QPushButton("🖨️")
+    self.print_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #34495e;
+            color: white;
+            font-weight: bold;
+            padding: 6px 10px;
+            border-radius: 3px;
+            border: none;
+            font-size: 11px;
+            min-width: 32px;
+            max-width: 32px;
+            min-height: 28px;
+            max-height: 28px;
+        }
+        QPushButton:hover {
+            background-color: #5d6d7e;
+        }
+        QPushButton:disabled {
+            background-color: #95a5a6;
+            color: #7f8c8d;
+        }
+    """)
+    self.print_btn.setToolTip("Печать")
+    layout.addWidget(self.print_btn)
+    
+    # PDF
+    self.pdf_btn = QPushButton("📄")
+    self.pdf_btn.setStyleSheet("""
+        QPushButton {
+            background-color: #c0392b;
+            color: white;
+            font-weight: bold;
+            padding: 6px 10px;
+            border-radius: 3px;
+            border: none;
+            font-size: 11px;
+            min-width: 32px;
+            max-width: 32px;
+            min-height: 28px;
+            max-height: 28px;
+        }
+        QPushButton:hover {
+            background-color: #e74c3c;
+        }
+        QPushButton:disabled {
+            background-color: #95a5a6;
+            color: #7f8c8d;
+        }
+    """)
+    self.pdf_btn.setToolTip("Экспорт в PDF")
+    layout.addWidget(self.pdf_btn)
+    
+    layout.addStretch()        
         
     def update_time(self):
         """Обновление времени в статусной строке"""
@@ -478,12 +559,30 @@ class MainWindow(QMainWindow):
         if hasattr(self.tab_widget, 'clients_btn'):
             self.tab_widget.clients_btn.clicked.connect(self.show_all_clients)
             
-         # Подключаем кнопки быстрых действий
-        self.search_btn.clicked.connect(self.show_search)
-        self.calendar_btn.clicked.connect(self.show_calendar)
-        self.reports_btn.clicked.connect(self.show_reports)
-        self.print_btn.clicked.connect(self.print_current)
-        self.pdf_btn.clicked.connect(self.export_pdf)           
+        # Подключаем кнопки быстрых действий
+        if hasattr(self, 'search_btn'):
+            self.search_btn.clicked.connect(self.show_search)
+        if hasattr(self, 'calendar_btn'):
+            self.calendar_btn.clicked.connect(self.show_calendar)
+        if hasattr(self, 'reports_btn'):
+            self.reports_btn.clicked.connect(self.show_reports)
+        if hasattr(self, 'print_btn'):
+            self.print_btn.clicked.connect(self.print_current)
+        if hasattr(self, 'pdf_btn'):
+            self.pdf_btn.clicked.connect(self.export_pdf) 
+            
+    def new_order(self):
+        """Переключиться на вкладку нового заказа"""
+        if hasattr(self, 'tab_widget') and hasattr(self, 'new_order_view'):
+            self.tab_widget.setCurrentWidget(self.new_order_view)
+            if hasattr(self.new_order_view, 'clear_form'):
+                self.new_order_view.clear_form()
+
+    def on_order_saved(self):
+        """Обработка сохранения заказа"""
+        if hasattr(self, 'orders_view'):
+            self.orders_view.refresh_orders()
+            self.tab_widget.setCurrentWidget(self.orders_view)            
         
     def show_status_message(self, message, timeout=3000):
         """Показать сообщение в статусной строке"""
@@ -656,6 +755,234 @@ class MainWindow(QMainWindow):
         """Сохранение настроек"""
         self.settings.setValue('geometry', self.saveGeometry())
         self.settings.setValue('windowState', self.saveState())
+        
+def import_data(self):
+    """Импорт данных"""
+    try:
+        from .dialogs.import_export_dialog import ImportDialog
+        dialog = ImportDialog(self, self.db_session)
+        if dialog.exec():
+            self.refresh_all_views()
+    except Exception as e:
+        QMessageBox.information(self, 'Импорт', f'Импорт данных в разработке\n{str(e)}')
+
+def export_data(self):
+    """Экспорт данных"""
+    try:
+        from .dialogs.import_export_dialog import ExportDialog
+        dialog = ExportDialog(self, self.db_session)
+        dialog.exec()
+    except Exception as e:
+        QMessageBox.information(self, 'Экспорт', f'Экспорт данных в разработке\n{str(e)}')
+
+def backup_database(self):
+    """Резервное копирование БД"""
+    try:
+        from .utils.backup import BackupManager
+        backup_manager = BackupManager()
+        if backup_manager.create_backup():
+            QMessageBox.information(self, 'Успех', 'Резервная копия создана успешно')
+        else:
+            QMessageBox.critical(self, 'Ошибка', 'Не удалось создать резервную копию')
+    except Exception as e:
+        QMessageBox.information(self, 'Резервное копирование', f'Резервное копирование в разработке\n{str(e)}')
+
+    def change_theme(self, theme_name):
+        """Изменить тему"""
+        self.settings.setValue('theme', theme_name)
+        self.theme_changed.emit(theme_name)
+        
+        # Обновляем чекбоксы в меню
+        if hasattr(self, 'theme_action_group'):
+            for i, action in enumerate(self.theme_action_group):
+                action.setChecked(i == 0 if theme_name == 'light' else i == 1)
+
+    def change_language(self, language):
+        """Изменить язык"""
+        self.settings.setValue('language', language)
+        self.language_changed.emit(language)
+        # Здесь будет перезагрузка интерфейса
+
+    def toggle_fullscreen(self):
+        """Переключить полноэкранный режим"""
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
+
+    def show_help(self):
+        """Показать справку"""
+        QMessageBox.information(self, 'Справка', 'Руководство пользователя будет доступно в следующей версии')
+
+    def show_about(self):
+        """Показать информацию о программе"""
+        try:
+            dialog = AboutDialog(self)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'О программе', 'СТО Management System v3.0\n\nСистема управления автосервисом')
+
+    def refresh_all_views(self):
+        """Обновить все представления"""
+        try:
+            if hasattr(self, 'orders_view'):
+                self.orders_view.refresh_orders()
+            if hasattr(self, 'catalogs_view'):
+                self.catalogs_view.refresh_data()
+        except Exception as e:
+            pass
+
+    def autosave(self):
+        """Автосохранение"""
+        # Сохраняем текущий заказ если он в процессе редактирования
+        try:
+            if hasattr(self, 'tab_widget') and hasattr(self, 'new_order_view'):
+                if self.tab_widget.currentWidget() == self.new_order_view:
+                    if hasattr(self.new_order_view, 'save_draft'):
+                        self.new_order_view.save_draft()
+        except Exception as e:
+            pass
+
+    def load_settings(self):
+        """Загрузка настроек"""
+        try:
+            # Размер и позиция окна
+            geometry = self.settings.value('geometry')
+            if geometry:
+                self.restoreGeometry(geometry)
+            
+            # Состояние окна
+            state = self.settings.value('windowState')
+            if state:
+                self.restoreState(state)
+                
+            # Тема
+            theme = self.settings.value('theme', 'light')
+            self.change_theme(theme)
+        except Exception as e:
+            pass
+
+    def save_settings(self):
+        """Сохранение настроек"""
+        try:
+            self.settings.setValue('geometry', self.saveGeometry())
+            self.settings.setValue('windowState', self.saveState())
+        except Exception as e:
+            pass  
+
+    def show_status_message(self, message, timeout=3000):
+        """Показать сообщение в статусной строке"""
+        if hasattr(self, 'status_bar'):
+            self.status_bar.showMessage(message, timeout)
+
+    def import_data(self):
+        """Импорт данных"""
+        try:
+            from .dialogs.import_export_dialog import ImportDialog
+            dialog = ImportDialog(self, self.db_session)
+            if dialog.exec():
+                self.refresh_all_views()
+        except Exception as e:
+            QMessageBox.information(self, 'Импорт', f'Импорт данных в разработке\n{str(e)}')
+
+    def export_data(self):
+        """Экспорт данных"""
+        try:
+            from .dialogs.import_export_dialog import ExportDialog
+            dialog = ExportDialog(self, self.db_session)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'Экспорт', f'Экспорт данных в разработке\n{str(e)}')
+
+    def backup_database(self):
+        """Резервное копирование БД"""
+        try:
+            from .utils.backup import BackupManager
+            backup_manager = BackupManager()
+            if backup_manager.create_backup():
+                QMessageBox.information(self, 'Успех', 'Резервная копия создана успешно')
+            else:
+                QMessageBox.critical(self, 'Ошибка', 'Не удалось создать резервную копию')
+        except Exception as e:
+            QMessageBox.information(self, 'Резервное копирование', f'Резервное копирование в разработке\n{str(e)}')
+
+    def change_theme(self, theme_name):
+        """Изменить тему"""
+        self.settings.setValue('theme', theme_name)
+        self.theme_changed.emit(theme_name)
+        
+        # Обновляем чекбоксы в меню
+        if hasattr(self, 'theme_action_group'):
+            for i, action in enumerate(self.theme_action_group):
+                action.setChecked(i == 0 if theme_name == 'light' else i == 1)
+
+    def change_language(self, language):
+        """Изменить язык"""
+        self.settings.setValue('language', language)
+        self.language_changed.emit(language)
+
+    def toggle_fullscreen(self):
+        """Переключить полноэкранный режим"""
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
+
+    def show_help(self):
+        """Показать справку"""
+        QMessageBox.information(self, 'Справка', 'Руководство пользователя будет доступно в следующей версии')
+
+    def show_about(self):
+        """Показать информацию о программе"""
+        try:
+            dialog = AboutDialog(self)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'О программе', 'СТО Management System v3.0\n\nСистема управления автосервисом')
+
+    def refresh_all_views(self):
+        """Обновить все представления"""
+        try:
+            if hasattr(self, 'orders_view'):
+                self.orders_view.refresh_orders()
+            if hasattr(self, 'catalogs_view'):
+                self.catalogs_view.refresh_data()
+        except Exception as e:
+            pass
+
+    def autosave(self):
+        """Автосохранение"""
+        try:
+            if hasattr(self, 'tab_widget') and hasattr(self, 'new_order_view'):
+                if self.tab_widget.currentWidget() == self.new_order_view:
+                    if hasattr(self.new_order_view, 'save_draft'):
+                        self.new_order_view.save_draft()
+        except Exception as e:
+            pass
+
+    def load_settings(self):
+        """Загрузка настроек"""
+        try:
+            geometry = self.settings.value('geometry')
+            if geometry:
+                self.restoreGeometry(geometry)
+            
+            state = self.settings.value('windowState')
+            if state:
+                self.restoreState(state)
+                
+            theme = self.settings.value('theme', 'light')
+            self.change_theme(theme)
+        except Exception as e:
+            pass
+
+    def save_settings(self):
+        """Сохранение настроек"""
+        try:
+            self.settings.setValue('geometry', self.saveGeometry())
+            self.settings.setValue('windowState', self.saveState())
+        except Exception as e:
+            pass         
         
     def closeEvent(self, event):
         """Обработка закрытия окна"""
