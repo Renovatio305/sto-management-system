@@ -7,140 +7,51 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                                QFrame, QCheckBox, QCompleter, QProgressBar, QScrollArea,
                                QSplitter, QGroupBox, QSpacerItem, QSizePolicy, QDateEdit,
                                QDoubleSpinBox, QSpinBox, QTableWidget, QTableWidgetItem,
-                               QHeaderView, QAbstractItemView, QTabWidget, QMessageBox)
-from PySide6.QtCore import Qt, QDate, Signal, QTimer
+                               QHeaderView, QAbstractItemView, QTabWidget, QMessageBox,
+                               QDateTimeEdit)
+from PySide6.QtCore import Qt, QDate, Signal, QTimer, QDateTime
 from PySide6.QtGui import QFont, QPalette, QColor, QPixmap, QPainter
 import logging
 from datetime import datetime
 from decimal import Decimal
+
+# Импорты моделей
 from shared_models.common_models import Client, Car, Employee
-from ..models_sto import Order, OrderService, OrderPart, ServiceCatalog
+from ..models_sto import Order, OrderService, OrderPart, ServiceCatalog, OrderStatus
+
+# Импорты диалогов
 from ..dialogs.client_dialog import ClientDialog
 from ..dialogs.car_dialog import CarDialog
 from ..dialogs.service_dialog import ServiceDialog
 from ..dialogs.part_dialog import PartDialog
 
 
-class DragHandle(QWidget):
-    """Виджет-ручка для изменения размера панелей"""
-    
-    def __init__(self, orientation=Qt.Horizontal):
-        super().__init__()
-        self.orientation = orientation
-        self.setFixedSize(20, 20)
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #3498db;
-                border-radius: 10px;
-                border: 2px solid #2980b9;
-            }
-            QWidget:hover {
-                background-color: #5dade2;
-                border: 2px solid #3498db;
-                cursor: pointer;
-            }
-        """)
-    
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        # Рисуем стрелки для обозначения возможности изменения размера
-        painter.setPen(QColor("#2c3e50"))
-        painter.setBrush(QColor("#2c3e50"))
-        
-        rect = self.rect()
-        center_x = rect.width() // 2
-        center_y = rect.height() // 2
-        
-        if self.orientation == Qt.Horizontal:
-            # Горизонтальные стрелки ↔
-            points1 = [
-                (center_x - 4, center_y),
-                (center_x - 1, center_y - 3),
-                (center_x - 1, center_y + 3)
-            ]
-            points2 = [
-                (center_x + 4, center_y),
-                (center_x + 1, center_y - 3),
-                (center_x + 1, center_y + 3)
-            ]
-            painter.drawPolygon(points1)
-            painter.drawPolygon(points2)
-        else:
-            # Вертикальные стрелки ↕
-            points1 = [
-                (center_x, center_y - 4),
-                (center_x - 3, center_y - 1),
-                (center_x + 3, center_y - 1)
-            ]
-            points2 = [
-                (center_x, center_y + 4),
-                (center_x - 3, center_y + 1),
-                (center_x + 3, center_y + 1)
-            ]
-            painter.drawPolygon(points1)
-            painter.drawPolygon(points2)
-
-
-class ScrollableGroupBox(QGroupBox):
-    """Группа с прокруткой"""
-    
-    def __init__(self, title, parent=None):
-        super().__init__(title, parent)
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #bdc3c7;
-                border-radius: 5px;
-                margin-top: 1ex;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                color: #2c3e50;
-            }
-        """)
-        
-        # Создаем скролл область
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        
-        # Контейнер для содержимого
-        self.content_widget = QWidget()
-        self.scroll_area.setWidget(self.content_widget)
-        
-        # Основной layout для группы
-        main_layout = QVBoxLayout(self)
-        main_layout.addWidget(self.scroll_area)
-        self.setLayout(main_layout)
-    
-    def setContentLayout(self, layout):
-        """Устанавливает layout для содержимого"""
-        self.content_widget.setLayout(layout)
-
-
 class NewOrderView(QWidget):
-    order_created = Signal(dict)
+    """Представление для создания нового заказа"""
     
-    def __init__(self, session, parent=None):
+    order_created = Signal(dict)
+    status_message = Signal(str, int)
+    order_saved = Signal()
+    
+    def __init__(self, db_session, parent=None):
         super().__init__(parent)
-        self.session = session
+        self.db_session = db_session
         self.logger = logging.getLogger(__name__)
         
         # Данные заказа
+        self.current_order = None
         self.selected_client = None
         self.selected_car = None
-        self.services = []
-        self.parts = []
+        self.unsaved_changes = False
         
         self.setup_ui()
         self.setup_connections()
         self.load_data()
+        
+        # Автосохранение
+        self.autosave_timer = QTimer()
+        self.autosave_timer.timeout.connect(self.save_draft)
+        self.autosave_timer.start(300000)  # 5 минут
     
     def setup_ui(self):
         """Настройка интерфейса"""
@@ -161,17 +72,14 @@ class NewOrderView(QWidget):
         self.main_splitter = QSplitter(Qt.Vertical)
         self.main_splitter.setChildrenCollapsible(False)
         
-        # Добавляем визуальную ручку для перетаскивания
-        drag_handle = DragHandle(Qt.Horizontal)
-        
-        # Верхняя панель - информация о клиенте и автомобиле
-        self.create_client_car_panel()
+        # Верхняя панель - информация о заказе и клиенте
+        self.create_order_info_panel()
         
         # Нижняя панель - услуги и запчасти
         self.create_services_parts_panel()
         
         # Добавляем панели в сплиттер
-        self.main_splitter.addWidget(self.client_car_widget)
+        self.main_splitter.addWidget(self.order_info_widget)
         self.main_splitter.addWidget(self.services_parts_widget)
         
         # Устанавливаем пропорции (40% верх, 60% низ)
@@ -190,10 +98,6 @@ class NewOrderView(QWidget):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                     stop:0 #5dade2, stop:1 #3498db);
             }
-            QSplitter::handle:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #2980b9, stop:1 #21618c);
-            }
         """)
         
         main_layout.addWidget(self.main_splitter)
@@ -202,141 +106,120 @@ class NewOrderView(QWidget):
         self.create_control_buttons()
         main_layout.addWidget(self.control_buttons_widget)
     
-    def create_client_car_panel(self):
-        """Создание панели клиента и автомобиля"""
-        self.client_car_widget = QWidget()
-        layout = QHBoxLayout(self.client_car_widget)
+    def create_order_info_panel(self):
+        """Создание панели информации о заказе"""
+        self.order_info_widget = QWidget()
+        layout = QHBoxLayout(self.order_info_widget)
         
-        # Группа клиента
-        client_group = ScrollableGroupBox("Информация о клиенте")
-        client_layout = QGridLayout()
+        # Левая группа - основная информация заказа
+        order_group = QGroupBox("📋 Информация о заказе")
+        order_layout = QGridLayout(order_group)
+        
+        # Номер заказа
+        order_layout.addWidget(QLabel("Номер заказа:"), 0, 0)
+        self.order_number_edit = QLineEdit()
+        self.order_number_edit.setPlaceholderText("Автоматически...")
+        self.order_number_edit.setReadOnly(True)
+        order_layout.addWidget(self.order_number_edit, 0, 1)
+        
+        # Дата приёма
+        order_layout.addWidget(QLabel("Дата приёма:"), 1, 0)
+        self.date_received_edit = QDateTimeEdit()
+        self.date_received_edit.setDateTime(QDateTime.currentDateTime())
+        self.date_received_edit.setCalendarPopup(True)
+        order_layout.addWidget(self.date_received_edit, 1, 1)
+        
+        # Дата выдачи
+        order_layout.addWidget(QLabel("Дата выдачи:"), 2, 0)
+        self.date_delivery_edit = QDateTimeEdit()
+        self.date_delivery_edit.setDateTime(QDateTime.currentDateTime().addDays(1))
+        self.date_delivery_edit.setCalendarPopup(True)
+        order_layout.addWidget(self.date_delivery_edit, 2, 1)
+        
+        # Статус
+        order_layout.addWidget(QLabel("Статус:"), 3, 0)
+        self.status_combo = QComboBox()
+        for status in OrderStatus:
+            self.status_combo.addItem(status.value, status)
+        order_layout.addWidget(self.status_combo, 3, 1)
+        
+        layout.addWidget(order_group)
+        
+        # Правая группа - клиент и автомобиль
+        client_car_group = QGroupBox("👤 Клиент и автомобиль")
+        client_car_layout = QVBoxLayout(client_car_group)
         
         # Поиск клиента
-        client_layout.addWidget(QLabel("Поиск клиента:"), 0, 0)
-        self.client_search = QLineEdit()
-        self.client_search.setPlaceholderText("Введите имя, телефон или email...")
-        client_layout.addWidget(self.client_search, 0, 1)
+        client_search_layout = QHBoxLayout()
+        client_search_layout.addWidget(QLabel("Клиент:"))
+        self.client_search_edit = QLineEdit()
+        self.client_search_edit.setPlaceholderText("Введите имя или телефон...")
+        client_search_layout.addWidget(self.client_search_edit)
         
-        self.new_client_btn = QPushButton("+ Новый клиент")
-        self.new_client_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60; 
-                color: white;
-                font-weight: bold;
-                padding: 5px 10px;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #2ecc71;
-            }
-        """)
-        client_layout.addWidget(self.new_client_btn, 0, 2)
+        self.new_client_btn = QPushButton("+ Новый")
+        self.new_client_btn.setStyleSheet("background-color: #27ae60; color: white;")
+        client_search_layout.addWidget(self.new_client_btn)
         
-        # Информация о выбранном клиенте
-        client_layout.addWidget(QLabel("Имя:"), 1, 0)
-        self.client_name_label = QLabel("-")
-        self.client_name_label.setStyleSheet("font-weight: bold; color: #2c3e50;")
-        client_layout.addWidget(self.client_name_label, 1, 1, 1, 2)
+        client_car_layout.addLayout(client_search_layout)
         
-        client_layout.addWidget(QLabel("Телефон:"), 2, 0)
-        self.client_phone_label = QLabel("-")
-        client_layout.addWidget(self.client_phone_label, 2, 1, 1, 2)
+        # Информация о клиенте
+        self.client_info_label = QLabel("Клиент не выбран")
+        self.client_info_label.setStyleSheet("color: #666; font-style: italic; margin: 5px;")
+        client_car_layout.addWidget(self.client_info_label)
         
-        client_layout.addWidget(QLabel("Email:"), 3, 0)
-        self.client_email_label = QLabel("-")
-        client_layout.addWidget(self.client_email_label, 3, 1, 1, 2)
-        
-        client_group.setContentLayout(client_layout)
-        layout.addWidget(client_group)
-        
-        # Группа автомобиля
-        car_group = ScrollableGroupBox("Информация об автомобиле")
-        car_layout = QGridLayout()
-        
-        # Выбор автомобиля
-        car_layout.addWidget(QLabel("Автомобиль:"), 0, 0)
+        # Поиск автомобиля
+        car_search_layout = QHBoxLayout()
+        car_search_layout.addWidget(QLabel("Автомобиль:"))
         self.car_combo = QComboBox()
         self.car_combo.setEnabled(False)
-        car_layout.addWidget(self.car_combo, 0, 1)
+        car_search_layout.addWidget(self.car_combo)
         
-        self.new_car_btn = QPushButton("+ Новый автомобиль")
-        self.new_car_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db; 
-                color: white;
-                font-weight: bold;
-                padding: 5px 10px;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #5dade2;
-            }
-        """)
+        self.new_car_btn = QPushButton("+ Новый")
+        self.new_car_btn.setStyleSheet("background-color: #3498db; color: white;")
         self.new_car_btn.setEnabled(False)
-        car_layout.addWidget(self.new_car_btn, 0, 2)
+        car_search_layout.addWidget(self.new_car_btn)
         
-        # Информация о выбранном автомобиле
-        car_layout.addWidget(QLabel("Марка:"), 1, 0)
-        self.car_brand_label = QLabel("-")
-        self.car_brand_label.setStyleSheet("font-weight: bold; color: #2c3e50;")
-        car_layout.addWidget(self.car_brand_label, 1, 1)
+        client_car_layout.addLayout(car_search_layout)
         
-        car_layout.addWidget(QLabel("Модель:"), 1, 2)
-        self.car_model_label = QLabel("-")
-        self.car_model_label.setStyleSheet("font-weight: bold; color: #2c3e50;")
-        car_layout.addWidget(self.car_model_label, 1, 3)
+        # Информация об автомобиле
+        self.car_info_label = QLabel("Автомобиль не выбран")
+        self.car_info_label.setStyleSheet("color: #666; font-style: italic; margin: 5px;")
+        client_car_layout.addWidget(self.car_info_label)
         
-        car_layout.addWidget(QLabel("Год:"), 2, 0)
-        self.car_year_label = QLabel("-")
-        car_layout.addWidget(self.car_year_label, 2, 1)
+        # Примечания
+        client_car_layout.addWidget(QLabel("Примечания:"))
+        self.notes_edit = QTextEdit()
+        self.notes_edit.setMaximumHeight(80)
+        self.notes_edit.setPlaceholderText("Дополнительная информация...")
+        client_car_layout.addWidget(self.notes_edit)
         
-        car_layout.addWidget(QLabel("Гос. номер:"), 2, 2)
-        self.car_license_label = QLabel("-")
-        car_layout.addWidget(self.car_license_label, 2, 3)
-        
-        car_layout.addWidget(QLabel("VIN:"), 3, 0)
-        self.car_vin_label = QLabel("-")
-        car_layout.addWidget(self.car_vin_label, 3, 1, 1, 3)
-        
-        car_layout.addWidget(QLabel("Пробег:"), 4, 0)
-        self.car_mileage_input = QSpinBox()
-        self.car_mileage_input.setRange(0, 1000000)
-        self.car_mileage_input.setSuffix(" км")
-        car_layout.addWidget(self.car_mileage_input, 4, 1)
-        
-        car_group.setContentLayout(car_layout)
-        layout.addWidget(car_group)
+        layout.addWidget(client_car_group)
     
     def create_services_parts_panel(self):
         """Создание панели услуг и запчастей"""
         self.services_parts_widget = QWidget()
-        main_layout = QHBoxLayout(self.services_parts_widget)
-        
-        # Левая часть - услуги и запчасти в табах
-        tabs_widget = QWidget()
-        tabs_layout = QVBoxLayout(tabs_widget)
+        layout = QHBoxLayout(self.services_parts_widget)
         
         # Создаем табы для услуг и запчастей
-        self.tabs = QTabWidget()
+        tabs = QTabWidget()
         
         # Вкладка услуг
-        self.create_services_tab()
+        self.create_services_tab(tabs)
         
         # Вкладка запчастей
-        self.create_parts_tab()
+        self.create_parts_tab(tabs)
         
-        tabs_layout.addWidget(self.tabs)
-        main_layout.addWidget(tabs_widget)
+        layout.addWidget(tabs)
         
-        # Правая часть - итоги и управление
+        # Панель итогов
         self.create_totals_panel()
-        main_layout.addWidget(self.totals_widget)
+        layout.addWidget(self.totals_widget)
         
         # Пропорции: 70% табы, 30% итоги
-        main_layout.setStretchFactor(tabs_widget, 7)
-        main_layout.setStretchFactor(self.totals_widget, 3)
+        layout.setStretchFactor(tabs, 7)
+        layout.setStretchFactor(self.totals_widget, 3)
     
-    def create_services_tab(self):
+    def create_services_tab(self, tabs):
         """Создание вкладки услуг"""
         services_widget = QWidget()
         services_layout = QVBoxLayout(services_widget)
@@ -345,65 +228,34 @@ class NewOrderView(QWidget):
         services_control_layout = QHBoxLayout()
         
         self.add_service_btn = QPushButton("+ Добавить услугу")
-        self.add_service_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60; 
-                color: white;
-                font-weight: bold;
-                padding: 8px 15px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #2ecc71;
-            }
-        """)
+        self.add_service_btn.setStyleSheet("background-color: #27ae60; color: white;")
         services_control_layout.addWidget(self.add_service_btn)
         
         self.remove_service_btn = QPushButton("- Удалить")
-        self.remove_service_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e74c3c; 
-                color: white;
-                font-weight: bold;
-                padding: 8px 15px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
-        """)
+        self.remove_service_btn.setStyleSheet("background-color: #e74c3c; color: white;")
         services_control_layout.addWidget(self.remove_service_btn)
         
         services_control_layout.addStretch()
         services_layout.addLayout(services_control_layout)
         
-        # Таблица услуг с прокруткой
-        services_scroll = QScrollArea()
-        services_scroll.setWidgetResizable(True)
-        
+        # Таблица услуг
         self.services_table = QTableWidget()
-        self.services_table.setColumnCount(5)
+        self.services_table.setColumnCount(4)
         self.services_table.setHorizontalHeaderLabels([
-            "Услуга", "Описание", "Цена", "Мастер", "Статус"
+            "Услуга", "Цена", "Мастер", "Статус"
         ])
         
         # Настройка таблицы
         header = self.services_table.horizontalHeader()
         header.setStretchLastSection(True)
-        header.resizeSection(0, 200)  # Услуга
-        header.resizeSection(1, 250)  # Описание
-        header.resizeSection(2, 100)  # Цена
-        header.resizeSection(3, 150)  # Мастер
-        
         self.services_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.services_table.setAlternatingRowColors(True)
         
-        services_scroll.setWidget(self.services_table)
-        services_layout.addWidget(services_scroll)
+        services_layout.addWidget(self.services_table)
         
-        self.tabs.addTab(services_widget, "🔧 Услуги")
+        tabs.addTab(services_widget, "🔧 Услуги")
     
-    def create_parts_tab(self):
+    def create_parts_tab(self, tabs):
         """Создание вкладки запчастей"""
         parts_widget = QWidget()
         parts_layout = QVBoxLayout(parts_widget)
@@ -412,42 +264,17 @@ class NewOrderView(QWidget):
         parts_control_layout = QHBoxLayout()
         
         self.add_part_btn = QPushButton("+ Добавить запчасть")
-        self.add_part_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60; 
-                color: white;
-                font-weight: bold;
-                padding: 8px 15px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #2ecc71;
-            }
-        """)
+        self.add_part_btn.setStyleSheet("background-color: #27ae60; color: white;")
         parts_control_layout.addWidget(self.add_part_btn)
         
         self.remove_part_btn = QPushButton("- Удалить")
-        self.remove_part_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #e74c3c; 
-                color: white;
-                font-weight: bold;
-                padding: 8px 15px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #c0392b;
-            }
-        """)
+        self.remove_part_btn.setStyleSheet("background-color: #e74c3c; color: white;")
         parts_control_layout.addWidget(self.remove_part_btn)
         
         parts_control_layout.addStretch()
         parts_layout.addLayout(parts_control_layout)
         
-        # Таблица запчастей с прокруткой
-        parts_scroll = QScrollArea()
-        parts_scroll.setWidgetResizable(True)
-        
+        # Таблица запчастей
         self.parts_table = QTableWidget()
         self.parts_table.setColumnCount(5)
         self.parts_table.setHorizontalHeaderLabels([
@@ -457,18 +284,12 @@ class NewOrderView(QWidget):
         # Настройка таблицы
         header = self.parts_table.horizontalHeader()
         header.setStretchLastSection(True)
-        header.resizeSection(0, 200)  # Запчасть
-        header.resizeSection(1, 150)  # Артикул
-        header.resizeSection(2, 80)   # Количество
-        header.resizeSection(3, 100)  # Цена за ед.
-        
         self.parts_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.parts_table.setAlternatingRowColors(True)
         
-        parts_scroll.setWidget(self.parts_table)
-        parts_layout.addWidget(parts_scroll)
+        parts_layout.addWidget(self.parts_table)
         
-        self.tabs.addTab(parts_widget, "🔩 Запчасти")
+        tabs.addTab(parts_widget, "🔩 Запчасти")
     
     def create_totals_panel(self):
         """Создание панели итогов"""
@@ -477,23 +298,6 @@ class NewOrderView(QWidget):
         
         # Группа итогов
         totals_group = QGroupBox("💰 Итоги заказа")
-        totals_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #3498db;
-                border-radius: 8px;
-                margin-top: 1ex;
-                padding-top: 10px;
-                background-color: #f8f9fa;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                color: #2c3e50;
-            }
-        """)
-        
         group_layout = QGridLayout(totals_group)
         
         # Стоимость услуг
@@ -513,61 +317,21 @@ class NewOrderView(QWidget):
         self.discount_input = QDoubleSpinBox()
         self.discount_input.setRange(0, 100)
         self.discount_input.setSuffix(" %")
-        self.discount_input.setStyleSheet("padding: 5px;")
         group_layout.addWidget(self.discount_input, 2, 1)
         
         # Разделитель
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
         line.setFrameShadow(QFrame.Sunken)
-        line.setStyleSheet("color: #bdc3c7;")
         group_layout.addWidget(line, 3, 0, 1, 2)
         
         # Общая сумма
-        total_label = QLabel("ИТОГО:")
-        total_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #2c3e50;")
-        group_layout.addWidget(total_label, 4, 0)
-        
+        group_layout.addWidget(QLabel("ИТОГО:"), 4, 0)
         self.total_label = QLabel("0.00 ₽")
-        self.total_label.setStyleSheet("""
-            font-weight: bold; 
-            font-size: 16px; 
-            color: #e74c3c;
-            background-color: #fef9e7;
-            padding: 5px;
-            border: 2px solid #f39c12;
-            border-radius: 5px;
-        """)
+        self.total_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #e74c3c;")
         group_layout.addWidget(self.total_label, 4, 1)
         
         totals_layout.addWidget(totals_group)
-        
-        # Примечания
-        notes_group = QGroupBox("📝 Примечания")
-        notes_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #95a5a6;
-                border-radius: 8px;
-                margin-top: 1ex;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-                color: #2c3e50;
-            }
-        """)
-        
-        notes_layout = QVBoxLayout(notes_group)
-        self.notes_edit = QTextEdit()
-        self.notes_edit.setPlaceholderText("Дополнительная информация о заказе...")
-        self.notes_edit.setMaximumHeight(120)
-        self.notes_edit.setStyleSheet("padding: 5px; border: 1px solid #bdc3c7; border-radius: 3px;")
-        notes_layout.addWidget(self.notes_edit)
-        
-        totals_layout.addWidget(notes_group)
         totals_layout.addStretch()
     
     def create_control_buttons(self):
@@ -585,10 +349,24 @@ class NewOrderView(QWidget):
                 font-weight: bold;
                 padding: 12px 25px;
                 border-radius: 6px;
-                font-size: 14px;
             }
             QPushButton:hover {
                 background-color: #e67e22;
+            }
+        """)
+        
+        # Кнопка сохранения черновика
+        self.save_draft_btn = QPushButton("💾 Сохранить черновик")
+        self.save_draft_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #95a5a6;
+                color: white;
+                font-weight: bold;
+                padding: 12px 25px;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #7f8c8d;
             }
         """)
         
@@ -614,12 +392,13 @@ class NewOrderView(QWidget):
         
         layout.addStretch()
         layout.addWidget(self.clear_btn)
+        layout.addWidget(self.save_draft_btn)
         layout.addWidget(self.save_btn)
     
     def setup_connections(self):
         """Настройка соединений сигналов"""
         # Поиск клиента
-        self.client_search.textChanged.connect(self.search_clients)
+        self.client_search_edit.textChanged.connect(self.search_clients)
         self.new_client_btn.clicked.connect(self.create_new_client)
         
         # Автомобиль
@@ -637,17 +416,23 @@ class NewOrderView(QWidget):
         
         # Управляющие кнопки
         self.save_btn.clicked.connect(self.save_order)
+        self.save_draft_btn.clicked.connect(self.save_draft)
         self.clear_btn.clicked.connect(self.clear_form)
+        
+        # Отслеживание изменений
+        self.notes_edit.textChanged.connect(self.mark_unsaved_changes)
+        self.date_received_edit.dateTimeChanged.connect(self.mark_unsaved_changes)
+        self.date_delivery_edit.dateTimeChanged.connect(self.mark_unsaved_changes)
     
     def load_data(self):
         """Загрузка данных"""
         try:
             # Настройка автодополнения для поиска клиентов
-            clients = self.session.query(Client).all()
-            client_names = [f"{c.first_name} {c.last_name} - {c.phone}" for c in clients]
+            clients = self.db_session.query(Client).all()
+            client_names = [f"{c.name} - {c.phone}" for c in clients]
             completer = QCompleter(client_names)
             completer.setCaseSensitivity(Qt.CaseInsensitive)
-            self.client_search.setCompleter(completer)
+            self.client_search_edit.setCompleter(completer)
             
         except Exception as e:
             self.logger.error(f"Ошибка загрузки данных: {e}")
@@ -655,14 +440,17 @@ class NewOrderView(QWidget):
     def search_clients(self, text):
         """Поиск клиентов"""
         if len(text) < 2:
+            self.client_info_label.setText("Клиент не выбран")
+            self.selected_client = None
+            self.car_combo.clear()
+            self.car_combo.setEnabled(False)
+            self.new_car_btn.setEnabled(False)
             return
         
         try:
-            clients = self.session.query(Client).filter(
-                (Client.first_name.ilike(f"%{text}%")) |
-                (Client.last_name.ilike(f"%{text}%")) |
-                (Client.phone.ilike(f"%{text}%")) |
-                (Client.email.ilike(f"%{text}%"))
+            clients = self.db_session.query(Client).filter(
+                (Client.name.ilike(f"%{text}%")) |
+                (Client.phone.ilike(f"%{text}%"))
             ).limit(10).all()
             
             if clients:
@@ -677,9 +465,10 @@ class NewOrderView(QWidget):
         self.selected_client = client
         
         # Обновляем информацию о клиенте
-        self.client_name_label.setText(f"{client.first_name} {client.last_name}")
-        self.client_phone_label.setText(client.phone)
-        self.client_email_label.setText(client.email or "-")
+        info_text = f"📞 {client.phone}"
+        if client.address:
+            info_text += f"\n📍 {client.address}"
+        self.client_info_label.setText(info_text)
         
         # Загружаем автомобили клиента
         self.load_client_cars()
@@ -695,13 +484,13 @@ class NewOrderView(QWidget):
             return
         
         try:
-            cars = self.session.query(Car).filter_by(client_id=self.selected_client.id).all()
+            cars = self.db_session.query(Car).filter_by(client_id=self.selected_client.id).all()
             
             self.car_combo.clear()
             self.car_combo.addItem("Выберите автомобиль", None)
             
             for car in cars:
-                display_text = f"{car.make} {car.model} ({car.year}) - {car.license_plate or 'без номера'}"
+                display_text = f"{car.make or 'Неизв.'} {car.model or ''} ({car.year or 'н/д'}) - {car.license_plate or 'без номера'}"
                 self.car_combo.addItem(display_text, car)
             
             self.car_combo.setEnabled(True)
@@ -713,7 +502,8 @@ class NewOrderView(QWidget):
         """Обработка выбора автомобиля"""
         if index <= 0:
             self.selected_car = None
-            self.clear_car_info()
+            self.car_info_label.setText("Автомобиль не выбран")
+            self.check_form_validity()
             return
         
         car = self.car_combo.itemData(index)
@@ -725,40 +515,23 @@ class NewOrderView(QWidget):
         self.selected_car = car
         
         # Обновляем информацию об автомобиле
-        self.car_brand_label.setText(car.make or car.brand if hasattr(car, 'brand') else car.make or '')
-        self.car_model_label.setText(car.model)
-        self.car_year_label.setText(str(car.year))
-        self.car_license_label.setText(car.license_plate or "-")
-        self.car_vin_label.setText(car.vin or "-")
-        self.car_mileage_input.setValue(car.mileage or 0)
-        
-        self.check_form_validity()
-    
-    def clear_car_info(self):
-        """Очистка информации об автомобиле"""
-        self.car_brand_label.setText("-")
-        self.car_model_label.setText("-")
-        self.car_year_label.setText("-")
-        self.car_license_label.setText("-")
-        self.car_vin_label.setText("-")
-        self.car_mileage_input.setValue(0)
+        info_text = f"🚗 {car.make or 'Неизв.'} {car.model or ''} ({car.year or 'н/д'})"
+        if car.vin:
+            info_text += f"\n📋 VIN: {car.vin}"
+        self.car_info_label.setText(info_text)
         
         self.check_form_validity()
     
     def create_new_client(self):
         """Создание нового клиента"""
         dialog = ClientDialog(parent=self)
-        dialog.db_session = self.session
+        dialog.db_session = self.db_session
         if dialog.exec():
             client = dialog.get_client()
             if client:
+                self.client_search_edit.setText(client.name)
                 self.select_client(client)
                 self.load_data()  # Обновляем автодополнение
-                
-            except Exception as e:
-                self.session.rollback()
-                self.logger.error(f"Ошибка создания клиента: {e}")
-                QMessageBox.critical(self, "Ошибка", f"Не удалось создать клиента: {e}")
     
     def create_new_car(self):
         """Создание нового автомобиля"""
@@ -766,7 +539,7 @@ class NewOrderView(QWidget):
             return
         
         dialog = CarDialog(parent=self, client_id=self.selected_client.id)
-        dialog.db_session = self.session
+        dialog.db_session = self.db_session
         if dialog.exec():
             car = dialog.get_car()
             if car:
@@ -777,97 +550,128 @@ class NewOrderView(QWidget):
                     if self.car_combo.itemData(i) and self.car_combo.itemData(i).id == car.id:
                         self.car_combo.setCurrentIndex(i)
                         break
-                
-            except Exception as e:
-                self.session.rollback()
-                self.logger.error(f"Ошибка создания автомобиля: {e}")
-                QMessageBox.critical(self, "Ошибка", f"Не удалось создать автомобиль: {e}")
     
     def add_service(self):
         """Добавление услуги"""
-        dialog = ServiceDialog(self.session, parent=self)
-        if dialog.exec():
-            service_data = dialog.get_service_data()
-            self.services.append(service_data)
-            self.update_services_table()
-            self.calculate_totals()
+        if not self.current_order:
+            if not self.save_draft():
+                return
+        
+        try:
+            dialog = ServiceDialog(parent=self, order_id=self.current_order.id)
+            dialog.db_session = self.db_session
+            if dialog.exec():
+                self.refresh_services_table()
+                self.calculate_totals()
+                self.mark_unsaved_changes()
+        except Exception as e:
+            self.logger.error(f"Ошибка добавления услуги: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось добавить услугу: {e}")
     
     def remove_service(self):
         """Удаление услуги"""
         current_row = self.services_table.currentRow()
-        if current_row >= 0 and current_row < len(self.services):
+        if current_row >= 0:
             result = QMessageBox.question(
-                self, 
-                "Подтверждение", 
+                self, "Подтверждение", 
                 "Удалить выбранную услугу?",
                 QMessageBox.Yes | QMessageBox.No
             )
             if result == QMessageBox.Yes:
-                self.services.pop(current_row)
-                self.update_services_table()
+                self.services_table.removeRow(current_row)
                 self.calculate_totals()
+                self.mark_unsaved_changes()
     
     def add_part(self):
         """Добавление запчасти"""
-        dialog = PartDialog(self.session, parent=self)
-        if dialog.exec():
-            part_data = dialog.get_part_data()
-            self.parts.append(part_data)
-            self.update_parts_table()
-            self.calculate_totals()
+        if not self.current_order:
+            if not self.save_draft():
+                return
+        
+        try:
+            dialog = PartDialog(parent=self, order_id=self.current_order.id)
+            dialog.db_session = self.db_session
+            if dialog.exec():
+                self.refresh_parts_table()
+                self.calculate_totals()
+                self.mark_unsaved_changes()
+        except Exception as e:
+            self.logger.error(f"Ошибка добавления запчасти: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось добавить запчасть: {e}")
     
     def remove_part(self):
         """Удаление запчасти"""
         current_row = self.parts_table.currentRow()
-        if current_row >= 0 and current_row < len(self.parts):
+        if current_row >= 0:
             result = QMessageBox.question(
-                self, 
-                "Подтверждение", 
+                self, "Подтверждение", 
                 "Удалить выбранную запчасть?",
                 QMessageBox.Yes | QMessageBox.No
             )
             if result == QMessageBox.Yes:
-                self.parts.pop(current_row)
-                self.update_parts_table()
+                self.parts_table.removeRow(current_row)
                 self.calculate_totals()
+                self.mark_unsaved_changes()
     
-    def update_services_table(self):
+    def refresh_services_table(self):
         """Обновление таблицы услуг"""
-        self.services_table.setRowCount(len(self.services))
+        if not self.current_order:
+            return
         
-        for row, service in enumerate(self.services):
-            self.services_table.setItem(row, 0, QTableWidgetItem(service.get('name', '')))
-            self.services_table.setItem(row, 1, QTableWidgetItem(service.get('description', '')))
-            self.services_table.setItem(row, 2, QTableWidgetItem(f"{service.get('price', 0):.2f} ₽"))
-            self.services_table.setItem(row, 3, QTableWidgetItem(service.get('master', '')))
-            self.services_table.setItem(row, 4, QTableWidgetItem(service.get('status', 'Ожидает')))
-    
-    def update_parts_table(self):
-        """Обновление таблицы запчастей"""
-        self.parts_table.setRowCount(len(self.parts))
-        
-        for row, part in enumerate(self.parts):
-            quantity = part.get('quantity', 0)
-            price = part.get('price', 0)
-            total = quantity * price
+        try:
+            services = self.db_session.query(OrderService).filter_by(order_id=self.current_order.id).all()
             
-            self.parts_table.setItem(row, 0, QTableWidgetItem(part.get('name', '')))
-            self.parts_table.setItem(row, 1, QTableWidgetItem(part.get('article', '')))
-            self.parts_table.setItem(row, 2, QTableWidgetItem(str(quantity)))
-            self.parts_table.setItem(row, 3, QTableWidgetItem(f"{price:.2f} ₽"))
-            self.parts_table.setItem(row, 4, QTableWidgetItem(f"{total:.2f} ₽"))
+            self.services_table.setRowCount(len(services))
+            
+            for row, service in enumerate(services):
+                self.services_table.setItem(row, 0, QTableWidgetItem(service.service_name or ''))
+                self.services_table.setItem(row, 1, QTableWidgetItem(f"{service.price:.2f} ₽"))
+                self.services_table.setItem(row, 2, QTableWidgetItem(""))  # Мастер
+                self.services_table.setItem(row, 3, QTableWidgetItem("Ожидает"))  # Статус
+        except Exception as e:
+            self.logger.error(f"Ошибка обновления таблицы услуг: {e}")
+    
+    def refresh_parts_table(self):
+        """Обновление таблицы запчастей"""
+        if not self.current_order:
+            return
+        
+        try:
+            parts = self.db_session.query(OrderPart).filter_by(order_id=self.current_order.id).all()
+            
+            self.parts_table.setRowCount(len(parts))
+            
+            for row, part in enumerate(parts):
+                self.parts_table.setItem(row, 0, QTableWidgetItem(part.part_name or ''))
+                self.parts_table.setItem(row, 1, QTableWidgetItem(part.article or ''))
+                self.parts_table.setItem(row, 2, QTableWidgetItem(str(part.quantity)))
+                self.parts_table.setItem(row, 3, QTableWidgetItem(f"{part.price:.2f} ₽"))
+                
+        except Exception as e:
+            self.logger.error(f"Ошибка обновления таблицы запчастей: {e}")
     
     def calculate_totals(self):
         """Расчет итогов"""
         # Сумма услуг
-        services_total = sum(service.get('price', 0) for service in self.services)
+        services_total = 0.0
+        if self.current_order:
+            try:
+                services = self.db_session.query(OrderService).filter_by(order_id=self.current_order.id).all()
+                services_total = sum(service.price for service in services)
+            except:
+                pass
+        
         self.services_total_label.setText(f"{services_total:.2f} ₽")
         
         # Сумма запчастей
-        parts_total = sum(
-            part.get('quantity', 0) * part.get('price', 0) 
-            for part in self.parts
-        )
+        parts_total = 0.0
+        if self.current_order:
+            try:
+                parts = self.db_session.query(OrderPart).filter_by(order_id=self.current_order.id).all()
+                parts_total = sum(part.quantity * part.price for part in parts)
+            except:
+                pass
+        
         self.parts_total_label.setText(f"{parts_total:.2f} ₽")
         
         # Общая сумма до скидки
@@ -887,11 +691,88 @@ class NewOrderView(QWidget):
         """Проверка валидности формы"""
         is_valid = (
             self.selected_client is not None and
-            self.selected_car is not None and
-            (len(self.services) > 0 or len(self.parts) > 0)
+            self.selected_car is not None
         )
         
         self.save_btn.setEnabled(is_valid)
+    
+    def mark_unsaved_changes(self):
+        """Отметка несохраненных изменений"""
+        self.unsaved_changes = True
+    
+    def generate_order_number(self):
+        """Генерация номера заказа"""
+        try:
+            today = datetime.now()
+            date_str = today.strftime('%Y%m%d')
+            
+            # Ищем последний номер за сегодня
+            pattern = f'СТО-{date_str}-%'
+            last_order = self.db_session.query(Order).filter(
+                Order.order_number.like(pattern)
+            ).order_by(Order.order_number.desc()).first()
+            
+            if last_order:
+                last_num = int(last_order.order_number.split('-')[-1])
+                new_num = last_num + 1
+            else:
+                new_num = 1
+                
+            return f'СТО-{date_str}-{new_num:03d}'
+            
+        except Exception as e:
+            self.logger.error(f"Ошибка генерации номера заказа: {e}")
+            return f'СТО-{datetime.now().strftime("%Y%m%d")}-001'
+    
+    def save_draft(self):
+        """Сохранение черновика"""
+        try:
+            if not self.selected_client:
+                QMessageBox.warning(self, "Предупреждение", "Выберите клиента")
+                return False
+            
+            # Создаем новый заказ если его нет
+            if not self.current_order:
+                self.current_order = Order()
+                self.current_order.order_number = self.generate_order_number()
+                self.order_number_edit.setText(self.current_order.order_number)
+                self.db_session.add(self.current_order)
+            
+            # Заполняем данные
+            self.current_order.client_id = self.selected_client.id
+            if self.selected_car:
+                self.current_order.car_id = self.selected_car.id
+            
+            self.current_order.date_received = self.date_received_edit.dateTime().toPython()
+            self.current_order.date_delivery = self.date_delivery_edit.dateTime().toPython()
+            self.current_order.notes = self.notes_edit.toPlainText()
+            self.current_order.status = OrderStatus.DRAFT
+            
+            # Рассчитываем итоговую сумму
+            services_total = 0.0
+            parts_total = 0.0
+            
+            if self.current_order.id:
+                services = self.db_session.query(OrderService).filter_by(order_id=self.current_order.id).all()
+                services_total = sum(service.price for service in services)
+                
+                parts = self.db_session.query(OrderPart).filter_by(order_id=self.current_order.id).all()
+                parts_total = sum(part.quantity * part.price for part in parts)
+            
+            self.current_order.total_amount = services_total + parts_total
+            
+            self.db_session.commit()
+            
+            self.unsaved_changes = False
+            self.status_message.emit("Черновик сохранен", 2000)
+            
+            return True
+            
+        except Exception as e:
+            self.db_session.rollback()
+            self.logger.error(f"Ошибка сохранения черновика: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить черновик: {e}")
+            return False
     
     def save_order(self):
         """Сохранение заказа"""
@@ -899,103 +780,104 @@ class NewOrderView(QWidget):
             QMessageBox.warning(self, "Предупреждение", "Выберите клиента и автомобиль")
             return
         
-        if not self.services and not self.parts:
-            QMessageBox.warning(self, "Предупреждение", "Добавьте хотя бы одну услугу или запчасть")
-            return
-        
         try:
-            # Создаем заказ
-            order = Order(
-                client_id=self.selected_client.id,
-                car_id=self.selected_car.id,
-                status='new',
-                created_date=datetime.now(),
-                notes=self.notes_edit.toPlainText(),
-                total_amount=float(self.total_label.text().replace(' ₽', '').replace(',', '.')),
-                discount_percent=self.discount_input.value()
-            )
+            # Сначала сохраняем как черновик
+            if not self.save_draft():
+                return
             
-            self.session.add(order)
-            self.session.flush()  # Получаем ID заказа
+            # Устанавливаем статус
+            status_index = self.status_combo.currentIndex()
+            if status_index >= 0:
+                status_data = self.status_combo.itemData(status_index)
+                if status_data:
+                    self.current_order.status = status_data
+                else:
+                    self.current_order.status = OrderStatus.IN_WORK
             
-            # Добавляем услуги
-            for service_data in self.services:
-                order_service = OrderService(
-                    order_id=order.id,
-                    service_name=service_data.get('name', ''),
-                    service_description=service_data.get('description', ''),
-                    price=service_data.get('price', 0),
-                    master=service_data.get('master', ''),
-                    status=service_data.get('status', 'pending')
-                )
-                self.session.add(order_service)
-            
-            # Добавляем запчасти
-            for part_data in self.parts:
-                order_part = OrderPart(
-                    order_id=order.id,
-                    part_name=part_data.get('name', ''),
-                    part_article=part_data.get('article', ''),
-                    quantity=part_data.get('quantity', 0),
-                    price=part_data.get('price', 0)
-                )
-                self.session.add(order_part)
-            
-            # Обновляем пробег автомобиля
-            if self.car_mileage_input.value() > 0:
-                self.selected_car.mileage = self.car_mileage_input.value()
-            
-            self.session.commit()
+            self.db_session.commit()
             
             # Отправляем сигнал о создании заказа
             order_data = {
-                'id': order.id,
-                'client': f"{self.selected_client.first_name} {self.selected_client.last_name}",
-                'car': f"{self.selected_car.brand} {self.selected_car.model}",
-                'total': order.total_amount
+                'id': self.current_order.id,
+                'number': self.current_order.order_number,
+                'client': self.selected_client.name,
+                'car': f"{self.selected_car.make} {self.selected_car.model}",
+                'total': self.current_order.total_amount
             }
             self.order_created.emit(order_data)
+            self.order_saved.emit()
             
-            QMessageBox.information(self, "Успех", f"Заказ №{order.id} создан успешно!")
+            QMessageBox.information(self, "Успех", f"Заказ {self.current_order.order_number} сохранен!")
+            
+            # Очищаем форму для нового заказа
             self.clear_form()
             
         except Exception as e:
-            self.session.rollback()
-            self.logger.error(f"Ошибка создания заказа: {e}")
-            QMessageBox.critical(self, "Ошибка", f"Не удалось создать заказ: {e}")
+            self.db_session.rollback()
+            self.logger.error(f"Ошибка сохранения заказа: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить заказ: {e}")
     
     def clear_form(self):
         """Очистка формы"""
-        result = QMessageBox.question(
-            self, 
-            "Подтверждение", 
-            "Очистить всю форму? Все несохраненные данные будут потеряны.",
-            QMessageBox.Yes | QMessageBox.No
-        )
+        if self.unsaved_changes:
+            result = QMessageBox.question(
+                self, "Подтверждение", 
+                "Очистить всю форму? Все несохраненные данные будут потеряны.",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if result != QMessageBox.Yes:
+                return
         
-        if result == QMessageBox.Yes:
-            # Очищаем данные
-            self.selected_client = None
-            self.selected_car = None
-            self.services.clear()
-            self.parts.clear()
+        # Очищаем данные
+        self.current_order = None
+        self.selected_client = None
+        self.selected_car = None
+        self.unsaved_changes = False
+        
+        # Очищаем интерфейс
+        self.order_number_edit.clear()
+        self.client_search_edit.clear()
+        self.client_info_label.setText("Клиент не выбран")
+        
+        self.car_combo.clear()
+        self.car_combo.setEnabled(False)
+        self.new_car_btn.setEnabled(False)
+        self.car_info_label.setText("Автомобиль не выбран")
+        
+        self.date_received_edit.setDateTime(QDateTime.currentDateTime())
+        self.date_delivery_edit.setDateTime(QDateTime.currentDateTime().addDays(1))
+        self.status_combo.setCurrentIndex(0)
+        
+        self.services_table.setRowCount(0)
+        self.parts_table.setRowCount(0)
+        
+        self.discount_input.setValue(0)
+        self.notes_edit.clear()
+        
+        self.calculate_totals()
+        self.check_form_validity()
+    
+    def has_unsaved_changes(self):
+        """Проверка наличия несохраненных изменений"""
+        return self.unsaved_changes
+    
+    def closeEvent(self, event):
+        """Обработка закрытия виджета"""
+        if self.unsaved_changes:
+            result = QMessageBox.question(
+                self, "Несохраненные изменения",
+                "Есть несохраненные изменения. Сохранить перед закрытием?",
+                QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel
+            )
             
-            # Очищаем интерфейс
-            self.client_search.clear()
-            self.client_name_label.setText("-")
-            self.client_phone_label.setText("-")
-            self.client_email_label.setText("-")
-            
-            self.car_combo.clear()
-            self.car_combo.setEnabled(False)
-            self.new_car_btn.setEnabled(False)
-            self.clear_car_info()
-            
-            self.update_services_table()
-            self.update_parts_table()
-            
-            self.discount_input.setValue(0)
-            self.notes_edit.clear()
-            
-            self.calculate_totals()
-            self.check_form_validity()
+            if result == QMessageBox.Save:
+                if not self.save_draft():
+                    event.ignore()
+                    return
+            elif result == QMessageBox.Cancel:
+                event.ignore()
+                return
+        
+        self.autosave_timer.stop()
+        event.accept()

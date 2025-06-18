@@ -354,18 +354,31 @@ class CalendarDialog(QDialog):
             
     def show_order_details(self, order):
         """Показать детали заказа"""
+        # Безопасное получение информации об автомобиле
+        car_info = 'Неизвестен'
+        if order.car:
+            car_parts = []
+            if order.car.brand:
+                car_parts.append(order.car.brand)
+            if order.car.model:
+                car_parts.append(order.car.model)
+            if order.car.year:
+                car_parts.append(f"({order.car.year})")
+            car_info = ' '.join(car_parts) if car_parts else 'Неизвестен'
+        
         details = f"""
 <h3>📋 Заказ № {order.order_number}</h3>
 
 <p><b>👤 Клиент:</b> {order.client.name if order.client else 'Неизвестен'}</p>
-<p><b>🚗 Автомобиль:</b> {order.car.brand} {order.car.model} ({order.car.year or ''}) если order.car else 'Неизвестен'}</p>
+<p><b>🚗 Автомобиль:</b> {car_info}</p>
 <p><b>📅 Дата приема:</b> {order.date_received.strftime('%d.%m.%Y %H:%M') if order.date_received else 'Не указана'}</p>
 <p><b>📅 Дата выдачи:</b> {order.date_delivery.strftime('%d.%m.%Y %H:%M') if order.date_delivery else 'Не указана'}</p>
 <p><b>📊 Статус:</b> {order.status.value if order.status else 'Неизвестен'}</p>
 <p><b>💰 Сумма:</b> {order.total_amount or 0:.2f} ₴</p>
-
-{f'<p><b>📝 Примечания:</b> {order.notes}</p>' if order.notes else ''}
-        """
+"""
+        
+        if order.notes:
+            details += f"<p><b>📝 Примечания:</b> {order.notes}</p>"
         
         self.order_details.setHtml(details)
         
