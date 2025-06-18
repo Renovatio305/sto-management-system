@@ -201,7 +201,7 @@ class MainWindow(QMainWindow):
         # Меню
         self.create_menu_bar()
         
-        # Убираем тулбар - не нужен
+        # Убираем тулбар - заменяем на кнопки справа
         # self.create_toolbar()
         
         # Контейнер для табов с кнопками
@@ -756,36 +756,36 @@ def create_quick_actions_panel(self):
         self.settings.setValue('geometry', self.saveGeometry())
         self.settings.setValue('windowState', self.saveState())
         
-def import_data(self):
-    """Импорт данных"""
-    try:
-        from .dialogs.import_export_dialog import ImportDialog
-        dialog = ImportDialog(self, self.db_session)
-        if dialog.exec():
-            self.refresh_all_views()
-    except Exception as e:
-        QMessageBox.information(self, 'Импорт', f'Импорт данных в разработке\n{str(e)}')
+    def import_data(self):
+        """Импорт данных"""
+        try:
+            from .dialogs.import_export_dialog import ImportDialog
+            dialog = ImportDialog(self, self.db_session)
+            if dialog.exec():
+                self.refresh_all_views()
+        except Exception as e:
+            QMessageBox.information(self, 'Импорт', f'Импорт данных в разработке\n{str(e)}')
 
-def export_data(self):
-    """Экспорт данных"""
-    try:
-        from .dialogs.import_export_dialog import ExportDialog
-        dialog = ExportDialog(self, self.db_session)
-        dialog.exec()
-    except Exception as e:
-        QMessageBox.information(self, 'Экспорт', f'Экспорт данных в разработке\n{str(e)}')
+    def export_data(self):
+        """Экспорт данных"""
+        try:
+            from .dialogs.import_export_dialog import ExportDialog
+            dialog = ExportDialog(self, self.db_session)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'Экспорт', f'Экспорт данных в разработке\n{str(e)}')
 
-def backup_database(self):
-    """Резервное копирование БД"""
-    try:
-        from .utils.backup import BackupManager
-        backup_manager = BackupManager()
-        if backup_manager.create_backup():
-            QMessageBox.information(self, 'Успех', 'Резервная копия создана успешно')
-        else:
-            QMessageBox.critical(self, 'Ошибка', 'Не удалось создать резервную копию')
-    except Exception as e:
-        QMessageBox.information(self, 'Резервное копирование', f'Резервное копирование в разработке\n{str(e)}')
+    def backup_database(self):
+        """Резервное копирование БД"""
+        try:
+            from .utils.backup import BackupManager
+            backup_manager = BackupManager()
+            if backup_manager.create_backup():
+                QMessageBox.information(self, 'Успех', 'Резервная копия создана успешно')
+            else:
+                QMessageBox.critical(self, 'Ошибка', 'Не удалось создать резервную копию')
+        except Exception as e:
+            QMessageBox.information(self, 'Резервное копирование', f'Резервное копирование в разработке\n{str(e)}')
 
     def change_theme(self, theme_name):
         """Изменить тему"""
@@ -1010,5 +1010,70 @@ def backup_database(self):
         # Останавливаем таймеры
         self.time_timer.stop()
         self.autosave_timer.stop()
+        
+    def import_data(self):
+        """Импорт данных"""
+        try:
+            from .dialogs.import_export_dialog import ImportDialog
+            dialog = ImportDialog(self, self.db_session)
+            if dialog.exec():
+                self.refresh_all_views()
+        except Exception as e:
+            QMessageBox.information(self, 'Импорт', f'Импорт данных в разработке\n{str(e)}')
+
+    def export_data(self):
+        """Экспорт данных"""
+        try:
+            from .dialogs.import_export_dialog import ExportDialog
+            dialog = ExportDialog(self, self.db_session)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'Экспорт', f'Экспорт данных в разработке\n{str(e)}')
+
+    def backup_database(self):
+        """Резервное копирование БД"""
+        try:
+            from .utils.backup import BackupManager
+            backup_manager = BackupManager()
+            if backup_manager.create_backup():
+                QMessageBox.information(self, 'Успех', 'Резервная копия создана успешно')
+            else:
+                QMessageBox.critical(self, 'Ошибка', 'Не удалось создать резервную копию')
+        except Exception as e:
+            QMessageBox.information(self, 'Резервное копирование', f'Резервное копирование в разработке\n{str(e)}')
+
+    def change_theme(self, theme_name):
+        """Изменить тему"""
+        self.settings.setValue('theme', theme_name)
+        self.theme_changed.emit(theme_name)
+        
+        # Обновляем чекбоксы в меню
+        if hasattr(self, 'theme_action_group'):
+            for i, action in enumerate(self.theme_action_group):
+                action.setChecked(i == 0 if theme_name == 'light' else i == 1)
+
+    def change_language(self, language):
+        """Изменить язык"""
+        self.settings.setValue('language', language)
+        self.language_changed.emit(language)
+
+    def toggle_fullscreen(self):
+        """Переключить полноэкранный режим"""
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
+
+    def show_help(self):
+        """Показать справку"""
+        QMessageBox.information(self, 'Справка', 'Руководство пользователя будет доступно в следующей версии')
+
+    def show_about(self):
+        """Показать информацию о программе"""
+        try:
+            dialog = AboutDialog(self)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'О программе', 'СТО Management System v3.0\n\nСистема управления автосервисом')
         
         event.accept()
