@@ -13,7 +13,8 @@ from PySide6.QtGui import QFont, QPalette, QColor, QPixmap, QPainter
 import logging
 from datetime import datetime
 from decimal import Decimal
-from ..models_sto import Client, Car, Service, Part, Order, OrderService, OrderPart
+from shared_models.common_models import Client, Car, Employee
+from ..models_sto import Order, OrderService, OrderPart, ServiceCatalog
 from ..dialogs.client_dialog import ClientDialog
 from ..dialogs.car_dialog import CarDialog
 from ..dialogs.service_dialog import ServiceDialog
@@ -700,7 +701,7 @@ class NewOrderView(QWidget):
             self.car_combo.addItem("Выберите автомобиль", None)
             
             for car in cars:
-                display_text = f"{car.brand} {car.model} ({car.year}) - {car.license_plate}"
+                display_text = f"{car.make} {car.model} ({car.year}) - {car.license_plate or 'без номера'}"
                 self.car_combo.addItem(display_text, car)
             
             self.car_combo.setEnabled(True)
@@ -724,7 +725,7 @@ class NewOrderView(QWidget):
         self.selected_car = car
         
         # Обновляем информацию об автомобиле
-        self.car_brand_label.setText(car.brand)
+        self.car_brand_label.setText(car.make or car.brand if hasattr(car, 'brand') else car.make or '')
         self.car_model_label.setText(car.model)
         self.car_year_label.setText(str(car.year))
         self.car_license_label.setText(car.license_plate or "-")
@@ -746,14 +747,11 @@ class NewOrderView(QWidget):
     
     def create_new_client(self):
         """Создание нового клиента"""
-        dialog = ClientDialog(self.session, parent=self)
+        dialog = ClientDialog(parent=self)
+        dialog.db_session = self.session
         if dialog.exec():
-            client_data = dialog.get_client_data()
-            try:
-                client = Client(**client_data)
-                self.session.add(client)
-                self.session.commit()
-                
+            client = dialog.get_client()
+            if client:
                 self.select_client(client)
                 self.load_data()  # Обновляем автодополнение
                 
@@ -767,14 +765,11 @@ class NewOrderView(QWidget):
         if not self.selected_client:
             return
         
-        dialog = CarDialog(self.session, self.selected_client.id, parent=self)
+        dialog = CarDialog(parent=self, client_id=self.selected_client.id)
+        dialog.db_session = self.session
         if dialog.exec():
-            car_data = dialog.get_car_data()
-            try:
-                car = Car(**car_data)
-                self.session.add(car)
-                self.session.commit()
-                
+            car = dialog.get_car()
+            if car:
                 self.load_client_cars()
                 
                 # Автоматически выбираем новый автомобиль
