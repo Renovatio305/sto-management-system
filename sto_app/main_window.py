@@ -1,16 +1,17 @@
 # sto_app/main_window.py
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                              QTabWidget, QToolBar, QStatusBar, QMessageBox,
-                              QSplitter, QLabel, QMenuBar, QMenu)
+                              QTabWidget, QStatusBar, QMessageBox, QFrame,
+                              QLabel, QMenuBar, QMenu, QPushButton, QSizePolicy,
+                              QTabBar, QSpacerItem)
 from PySide6.QtCore import Qt, QSettings, Signal, QTimer
-from PySide6.QtGui import QAction, QIcon, QKeySequence
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QFont
 from PySide6.QtCore import QSize
 
 from datetime import datetime
 import sys
 import os
 
-# Импорт вкладок (будут созданы далее)
+# Импорт вкладок
 from .views.orders_view import OrdersView
 from .views.new_order_view import NewOrderView
 from .views.catalogs_view import CatalogsView
@@ -18,9 +19,142 @@ from .views.settings_view import SettingsView
 
 # Импорт диалогов
 from .dialogs.about_dialog import AboutDialog
+from .dialogs.search_dialog import SearchDialog
+from .dialogs.calendar_dialog import CalendarDialog
+from .dialogs.reports_dialog import ReportsDialog
 
 # База данных
 from config.database import SessionLocal
+
+
+class CompactActionButton(QPushButton):
+    """Компактная кнопка действия"""
+    
+    def __init__(self, text, icon=None, color="#3498db"):
+        super().__init__(text)
+        if icon:
+            self.setIcon(QIcon(icon))
+        
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color};
+                color: white;
+                font-weight: bold;
+                padding: 6px 12px;
+                border-radius: 4px;
+                border: none;
+                margin: 0 2px;
+                min-width: 80px;
+                max-height: 32px;
+            }}
+            QPushButton:hover {{
+                background-color: {self._lighten_color(color)};
+            }}
+            QPushButton:pressed {{
+                background-color: {self._darken_color(color)};
+            }}
+            QPushButton:disabled {{
+                background-color: #95a5a6;
+                color: #7f8c8d;
+            }}
+        """)
+    
+    def _lighten_color(self, color):
+        """Осветлить цвет для hover эффекта"""
+        color_map = {
+            "#3498db": "#5dade2",
+            "#e67e22": "#f39c12", 
+            "#9b59b6": "#af7ac5",
+            "#27ae60": "#2ecc71"
+        }
+        return color_map.get(color, color)
+    
+    def _darken_color(self, color):
+        """Затемнить цвет для pressed эффекта"""
+        color_map = {
+            "#3498db": "#2980b9",
+            "#e67e22": "#d35400",
+            "#9b59b6": "#8e44ad", 
+            "#27ae60": "#229954"
+        }
+        return color_map.get(color, color)
+
+
+class CustomTabWidget(QTabWidget):
+    """Кастомный виджет вкладок с кнопками справа"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_window = parent
+        self.setup_custom_tab_bar()
+    
+    def setup_custom_tab_bar(self):
+        """Настройка кастомного таб-бара"""
+        # Создаем контейнер для таб-бара и кнопок
+        tab_container = QWidget()
+        tab_layout = QHBoxLayout(tab_container)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(5)
+        
+        # Получаем оригинальный таб-бар
+        original_tab_bar = self.tabBar()
+        
+        # Добавляем растягивающийся элемент между табами и кнопками
+        tab_layout.addWidget(original_tab_bar)
+        tab_layout.addStretch()
+        
+        # Создаем кнопки действий
+        self.create_action_buttons(tab_layout)
+        
+        # Устанавливаем кастомный таб-бар
+        self.setTabBar(CustomTabBar(tab_container))
+    
+    def create_action_buttons(self, layout):
+        """Создание кнопок действий"""
+        # Поиск
+        self.search_btn = CompactActionButton("🔍", color="#9b59b6")
+        self.search_btn.setToolTip("Поиск (Ctrl+F)")
+        self.search_btn.setMaximumWidth(40)
+        layout.addWidget(self.search_btn)
+        
+        # Календарь
+        self.calendar_btn = CompactActionButton("📅", color="#3498db")
+        self.calendar_btn.setToolTip("Календарь (Ctrl+K)")
+        self.calendar_btn.setMaximumWidth(40)
+        layout.addWidget(self.calendar_btn)
+        
+        # Отчёты
+        self.reports_btn = CompactActionButton("📊", color="#e67e22")
+        self.reports_btn.setToolTip("Отчёты (Ctrl+R)")
+        self.reports_btn.setMaximumWidth(40)
+        layout.addWidget(self.reports_btn)
+        
+        # Зарплата
+        self.salary_btn = CompactActionButton("💰", color="#f39c12")
+        self.salary_btn.setToolTip("Зарплата")
+        self.salary_btn.setMaximumWidth(40)
+        layout.addWidget(self.salary_btn)
+        
+        # Все клиенты
+        self.clients_btn = CompactActionButton("👥", color="#27ae60")
+        self.clients_btn.setToolTip("Все клиенты")
+        self.clients_btn.setMaximumWidth(40)
+        layout.addWidget(self.clients_btn)
+
+
+class CustomTabBar(QTabBar):
+    """Кастомный таб-бар"""
+    
+    def __init__(self, widget):
+        super().__init__()
+        self.widget = widget
+        
+    def tabSizeHint(self, index):
+        """Настройка размера вкладок"""
+        size = super().tabSizeHint(index)
+        # Делаем вкладки немного выше для лучшего вида
+        size.setHeight(40)
+        return size
 
 
 class MainWindow(QMainWindow):
@@ -37,9 +171,13 @@ class MainWindow(QMainWindow):
         
         self.setWindowTitle('СТО Management System v3.0')
         self.setGeometry(100, 100, 1400, 900)
+        self.setMinimumSize(1200, 800)
         
         # Установка иконки
-        self.setWindowIcon(QIcon('resources/icons/app.png'))
+        try:
+            self.setWindowIcon(QIcon('resources/icons/app.png'))
+        except:
+            pass  # Игнорируем отсутствие иконки
         
         self.setup_ui()
         self.load_settings()
@@ -58,18 +196,16 @@ class MainWindow(QMainWindow):
         
         # Главный layout
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(5)
         
         # Меню
         self.create_menu_bar()
         
-        # Панель инструментов
-        self.create_toolbar()
+        # Убираем верхнюю панель быстрых действий - переносим все в табы
         
-        # Вкладки
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setTabPosition(QTabWidget.TabPosition.North)
-        self.tab_widget.setMovable(True)
+        # Создаем кастомный виджет вкладок
+        self.tab_widget = CustomTabWidget(self)
         
         # Создаем вкладки
         self.orders_view = OrdersView(self.db_session)
@@ -77,16 +213,53 @@ class MainWindow(QMainWindow):
         self.catalogs_view = CatalogsView(self.db_session)
         self.settings_view = SettingsView()
         
-        # Добавляем вкладки
-        self.tab_widget.addTab(self.orders_view, QIcon('resources/icons/orders.png'), 'Заказы')
-        self.tab_widget.addTab(self.new_order_view, QIcon('resources/icons/new_order.png'), 'Новый заказ')
-        self.tab_widget.addTab(self.catalogs_view, QIcon('resources/icons/catalog.png'), 'Справочники')
-        self.tab_widget.addTab(self.settings_view, QIcon('resources/icons/settings.png'), 'Настройки')
+        # Добавляем ВСЕ вкладки включая "Новый заказ"
+        self.tab_widget.addTab(self.orders_view, '📋 Заказы')
+        self.tab_widget.addTab(self.new_order_view, '➕ Новый заказ')  # ОСТАВЛЯЕМ!
+        self.tab_widget.addTab(self.catalogs_view, '📚 Справочники') 
+        self.tab_widget.addTab(self.settings_view, '⚙️ Настройки')
         
         main_layout.addWidget(self.tab_widget)
         
         # Статусная строка
         self.create_status_bar()
+        
+        # Стилизация табов
+        self.style_tabs()
+        
+    def style_tabs(self):
+        """Стилизация вкладок"""
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #bdc3c7;
+                background-color: white;
+                border-radius: 4px;
+            }
+            QTabBar::tab {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f9fa, stop:1 #e9ecef);
+                border: 1px solid #bdc3c7;
+                padding: 12px 20px;
+                margin-right: 2px;
+                font-weight: bold;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                min-width: 120px;
+            }
+            QTabBar::tab:selected {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #3498db, stop:1 #2980b9);
+                color: white;
+                border-bottom: none;
+            }
+            QTabBar::tab:hover:!selected {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #ecf0f1, stop:1 #d5dbdb);
+            }
+            QTabBar::tab:first {
+                margin-left: 0;
+            }
+        """)
         
     def create_menu_bar(self):
         """Создание меню"""
@@ -96,86 +269,75 @@ class MainWindow(QMainWindow):
         file_menu = QMenu('&Файл', self)
         menubar.addMenu(file_menu)
         
-        new_order_action = QAction(QIcon('resources/icons/new_order.png'), '&Новый заказ', self)
-        new_order_action.setShortcut(QKeySequence.New)
-        new_order_action.triggered.connect(self.new_order)
-        file_menu.addAction(new_order_action)
-        
         file_menu.addSeparator()
         
-        import_action = QAction(QIcon('resources/icons/import.png'), '&Импорт данных...', self)
+        import_action = QAction('&Импорт данных...', self)
         import_action.setShortcut(QKeySequence('Ctrl+I'))
         import_action.triggered.connect(self.import_data)
         file_menu.addAction(import_action)
         
-        export_action = QAction(QIcon('resources/icons/export.png'), '&Экспорт данных...', self)
+        export_action = QAction('&Экспорт данных...', self)
         export_action.setShortcut(QKeySequence('Ctrl+E'))
         export_action.triggered.connect(self.export_data)
         file_menu.addAction(export_action)
         
         file_menu.addSeparator()
         
-        exit_action = QAction(QIcon('resources/icons/exit.png'), '&Выход', self)
+        exit_action = QAction('&Выход', self)
         exit_action.setShortcut(QKeySequence.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
-        # Меню Правка
-        edit_menu = QMenu('&Правка', self)
-        menubar.addMenu(edit_menu)
+        # Меню Сервис
+        service_menu = QMenu('&Сервис', self)
+        menubar.addMenu(service_menu)
         
-        find_action = QAction(QIcon('resources/icons/search.png'), '&Поиск...', self)
-        find_action.setShortcut(QKeySequence.Find)
-        find_action.triggered.connect(self.show_search)
-        edit_menu.addAction(find_action)
+        # Управление зарплатой
+        salary_action = QAction('Управление зарплатой', self)
+        salary_action.triggered.connect(self.manage_salary)
+        service_menu.addAction(salary_action)
         
-        # Меню Вид
-        view_menu = QMenu('&Вид', self)
-        menubar.addMenu(view_menu)
+        service_menu.addSeparator()
         
-        # Подменю тем
-        theme_menu = QMenu('Тема', self)
-        theme_menu.setIcon(QIcon('resources/icons/theme.png'))
-        view_menu.addMenu(theme_menu)
+        # Просмотр клиентов
+        clients_action = QAction('Все клиенты', self)
+        clients_action.triggered.connect(self.show_all_clients)
+        service_menu.addAction(clients_action)
         
-        light_theme_action = QAction('Светлая', self)
-        light_theme_action.setCheckable(True)
-        light_theme_action.triggered.connect(lambda: self.change_theme('light'))
-        theme_menu.addAction(light_theme_action)
+        # Просмотр автомобилей
+        cars_action = QAction('Все автомобили', self)
+        cars_action.triggered.connect(self.show_all_cars)
+        service_menu.addAction(cars_action)
         
-        dark_theme_action = QAction('Темная', self)
-        dark_theme_action.setCheckable(True)
-        dark_theme_action.triggered.connect(lambda: self.change_theme('dark'))
-        theme_menu.addAction(dark_theme_action)
+        service_menu.addSeparator()
         
-        # Группа для радио-кнопок
-        self.theme_action_group = [light_theme_action, dark_theme_action]
-        
-        view_menu.addSeparator()
-        
-        fullscreen_action = QAction('Полноэкранный режим', self)
-        fullscreen_action.setShortcut(QKeySequence.FullScreen)
-        fullscreen_action.setCheckable(True)
-        fullscreen_action.triggered.connect(self.toggle_fullscreen)
-        view_menu.addAction(fullscreen_action)
+        # Импорт услуг
+        import_services_action = QAction('Импорт услуг', self)
+        import_services_action.triggered.connect(self.import_services)
+        service_menu.addAction(import_services_action)
         
         # Меню Инструменты
         tools_menu = QMenu('&Инструменты', self)
         menubar.addMenu(tools_menu)
         
-        calendar_action = QAction(QIcon('resources/icons/calendar.png'), '&Календарь записей', self)
+        calendar_action = QAction('&Календарь записей', self)
         calendar_action.setShortcut(QKeySequence('Ctrl+K'))
         calendar_action.triggered.connect(self.show_calendar)
         tools_menu.addAction(calendar_action)
         
-        reports_action = QAction(QIcon('resources/icons/reports.png'), '&Отчеты', self)
+        reports_action = QAction('&Отчеты', self)
         reports_action.setShortcut(QKeySequence('Ctrl+R'))
         reports_action.triggered.connect(self.show_reports)
         tools_menu.addAction(reports_action)
         
+        search_action = QAction('&Поиск', self)
+        search_action.setShortcut(QKeySequence('Ctrl+F'))
+        search_action.triggered.connect(self.show_search)
+        tools_menu.addAction(search_action)
+        
         tools_menu.addSeparator()
         
-        backup_action = QAction(QIcon('resources/icons/backup.png'), '&Резервное копирование', self)
+        backup_action = QAction('&Резервное копирование', self)
         backup_action.triggered.connect(self.backup_database)
         tools_menu.addAction(backup_action)
         
@@ -183,57 +345,9 @@ class MainWindow(QMainWindow):
         help_menu = QMenu('&Справка', self)
         menubar.addMenu(help_menu)
         
-        help_action = QAction(QIcon('resources/icons/help.png'), '&Руководство пользователя', self)
-        help_action.setShortcut(QKeySequence.HelpContents)
-        help_action.triggered.connect(self.show_help)
-        help_menu.addAction(help_action)
-        
-        help_menu.addSeparator()
-        
-        about_action = QAction(QIcon('resources/icons/about.png'), '&О программе', self)
+        about_action = QAction('&О программе', self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
-        
-    def create_toolbar(self):
-        """Создание панели инструментов"""
-        toolbar = QToolBar('Главная панель')
-        toolbar.setMovable(False)
-        toolbar.setIconSize(QSize(32, 32))
-        self.addToolBar(toolbar)
-        
-        # Новый заказ
-        new_order_action = QAction(QIcon('resources/icons/new_order.png'), 'Новый заказ', self)
-        new_order_action.triggered.connect(self.new_order)
-        toolbar.addAction(new_order_action)
-        
-        # Поиск
-        search_action = QAction(QIcon('resources/icons/search.png'), 'Поиск', self)
-        search_action.triggered.connect(self.show_search)
-        toolbar.addAction(search_action)
-        
-        toolbar.addSeparator()
-        
-        # Календарь
-        calendar_action = QAction(QIcon('resources/icons/calendar.png'), 'Календарь', self)
-        calendar_action.triggered.connect(self.show_calendar)
-        toolbar.addAction(calendar_action)
-        
-        # Отчеты
-        reports_action = QAction(QIcon('resources/icons/reports.png'), 'Отчеты', self)
-        reports_action.triggered.connect(self.show_reports)
-        toolbar.addAction(reports_action)
-        
-        toolbar.addSeparator()
-        
-        # Печать
-        print_action = QAction(QIcon('resources/icons/print.png'), 'Печать', self)
-        print_action.triggered.connect(self.print_current)
-        toolbar.addAction(print_action)
-        
-        # PDF
-        pdf_action = QAction(QIcon('resources/icons/pdf.png'), 'Экспорт в PDF', self)
-        pdf_action.triggered.connect(self.export_pdf)
-        toolbar.addAction(pdf_action)
         
     def create_status_bar(self):
         """Создание статусной строки"""
@@ -275,14 +389,21 @@ class MainWindow(QMainWindow):
         self.settings_view.theme_changed.connect(self.change_theme)
         self.settings_view.language_changed.connect(self.change_language)
         
+        # Подключаем кнопки в кастомном таб-виджете
+        if hasattr(self.tab_widget, 'search_btn'):
+            self.tab_widget.search_btn.clicked.connect(self.show_search)
+        if hasattr(self.tab_widget, 'calendar_btn'):
+            self.tab_widget.calendar_btn.clicked.connect(self.show_calendar)
+        if hasattr(self.tab_widget, 'reports_btn'):
+            self.tab_widget.reports_btn.clicked.connect(self.show_reports)
+        if hasattr(self.tab_widget, 'salary_btn'):
+            self.tab_widget.salary_btn.clicked.connect(self.manage_salary)
+        if hasattr(self.tab_widget, 'clients_btn'):
+            self.tab_widget.clients_btn.clicked.connect(self.show_all_clients)
+        
     def show_status_message(self, message, timeout=3000):
         """Показать сообщение в статусной строке"""
         self.status_bar.showMessage(message, timeout)
-        
-    def new_order(self):
-        """Переключиться на вкладку нового заказа"""
-        self.tab_widget.setCurrentWidget(self.new_order_view)
-        self.new_order_view.clear_form()
         
     def on_order_saved(self):
         """Обработка сохранения заказа"""
@@ -291,21 +412,65 @@ class MainWindow(QMainWindow):
         
     def show_search(self):
         """Показать диалог поиска"""
-        from .dialogs.search_dialog import SearchDialog
-        dialog = SearchDialog(self, self.db_session)
-        dialog.exec()
+        try:
+            dialog = SearchDialog(self, self.db_session)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'Поиск', f'Функция поиска в разработке\n{str(e)}')
         
     def show_calendar(self):
         """Показать календарь записей"""
-        from .dialogs.calendar_dialog import CalendarDialog
-        dialog = CalendarDialog(self, self.db_session)
-        dialog.exec()
+        try:
+            dialog = CalendarDialog(self, self.db_session)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'Календарь', f'Календарь в разработке\n{str(e)}')
         
     def show_reports(self):
         """Показать окно отчетов"""
-        from .dialogs.reports_dialog import ReportsDialog
-        dialog = ReportsDialog(self.db_session, self)
-        dialog.exec()
+        try:
+            dialog = ReportsDialog(self.db_session, self)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'Отчёты', f'Отчёты в разработке\n{str(e)}')
+        
+    def manage_salary(self):
+        """Управление зарплатой"""
+        from .dialogs.salary_dialog import SalaryDialog
+        try:
+            dialog = SalaryDialog(self.db_session, self)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'Зарплата', f'Управление зарплатой в разработке\n{str(e)}')
+        
+    def show_all_clients(self):
+        """Показать всех клиентов"""
+        from .dialogs.clients_list_dialog import ClientsListDialog
+        try:
+            dialog = ClientsListDialog(self.db_session, self)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'Клиенты', f'Просмотр клиентов в разработке\n{str(e)}')
+        
+    def show_all_cars(self):
+        """Показать все автомобили"""
+        from .dialogs.cars_list_dialog import CarsListDialog
+        try:
+            dialog = CarsListDialog(self.db_session, self)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'Автомобили', f'Просмотр автомобилей в разработке\n{str(e)}')
+        
+    def import_services(self):
+        """Импорт услуг"""
+        from .dialogs.import_services_dialog import ImportServicesDialog
+        try:
+            dialog = ImportServicesDialog(self.db_session, self)
+            if dialog.exec():
+                self.catalogs_view.refresh_data()
+                QMessageBox.information(self, 'Успех', 'Услуги импортированы успешно')
+        except Exception as e:
+            QMessageBox.information(self, 'Импорт услуг', f'Импорт услуг в разработке\n{str(e)}')
         
     def print_current(self):
         """Печать текущего документа"""
@@ -325,56 +490,52 @@ class MainWindow(QMainWindow):
             
     def import_data(self):
         """Импорт данных"""
-        from .dialogs.import_export_dialog import ImportDialog
-        dialog = ImportDialog(self, self.db_session)
-        if dialog.exec():
-            self.refresh_all_views()
+        try:
+            from .dialogs.import_export_dialog import ImportDialog
+            dialog = ImportDialog(self, self.db_session)
+            if dialog.exec():
+                self.refresh_all_views()
+        except Exception as e:
+            QMessageBox.information(self, 'Импорт', f'Импорт данных в разработке\n{str(e)}')
             
     def export_data(self):
         """Экспорт данных"""
-        from .dialogs.import_export_dialog import ExportDialog
-        dialog = ExportDialog(self, self.db_session)
-        dialog.exec()
+        try:
+            from .dialogs.import_export_dialog import ExportDialog
+            dialog = ExportDialog(self, self.db_session)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'Экспорт', f'Экспорт данных в разработке\n{str(e)}')
         
     def backup_database(self):
         """Резервное копирование БД"""
-        from .utils.backup import BackupManager
-        backup_manager = BackupManager()
-        if backup_manager.create_backup():
-            QMessageBox.information(self, 'Успех', 'Резервная копия создана успешно')
-        else:
-            QMessageBox.critical(self, 'Ошибка', 'Не удалось создать резервную копию')
+        try:
+            from .utils.backup import BackupManager
+            backup_manager = BackupManager()
+            if backup_manager.create_backup():
+                QMessageBox.information(self, 'Успех', 'Резервная копия создана успешно')
+            else:
+                QMessageBox.critical(self, 'Ошибка', 'Не удалось создать резервную копию')
+        except Exception as e:
+            QMessageBox.information(self, 'Резервное копирование', f'Резервное копирование в разработке\n{str(e)}')
             
     def change_theme(self, theme_name):
         """Изменить тему"""
         self.settings.setValue('theme', theme_name)
         self.theme_changed.emit(theme_name)
-        
-        # Обновляем чекбоксы в меню
-        for i, action in enumerate(self.theme_action_group):
-            action.setChecked(i == 0 if theme_name == 'light' else i == 1)
             
     def change_language(self, language):
         """Изменить язык"""
         self.settings.setValue('language', language)
         self.language_changed.emit(language)
-        # Здесь будет перезагрузка интерфейса
-        
-    def toggle_fullscreen(self):
-        """Переключить полноэкранный режим"""
-        if self.isFullScreen():
-            self.showNormal()
-        else:
-            self.showFullScreen()
-            
-    def show_help(self):
-        """Показать справку"""
-        QMessageBox.information(self, 'Справка', 'Руководство пользователя будет доступно в следующей версии')
         
     def show_about(self):
         """Показать информацию о программе"""
-        dialog = AboutDialog(self)
-        dialog.exec()
+        try:
+            dialog = AboutDialog(self)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.information(self, 'О программе', 'СТО Management System v3.0\n\nСистема управления автосервисом')
         
     def refresh_all_views(self):
         """Обновить все представления"""
@@ -385,7 +546,8 @@ class MainWindow(QMainWindow):
         """Автосохранение"""
         # Сохраняем текущий заказ если он в процессе редактирования
         if self.tab_widget.currentWidget() == self.new_order_view:
-            self.new_order_view.save_draft()
+            if hasattr(self.new_order_view, 'save_draft'):
+                self.new_order_view.save_draft()
             
     def load_settings(self):
         """Загрузка настроек"""
@@ -411,7 +573,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Обработка закрытия окна"""
         # Проверяем несохраненные изменения
-        if self.new_order_view.has_unsaved_changes():
+        if hasattr(self.new_order_view, 'has_unsaved_changes') and self.new_order_view.has_unsaved_changes():
             reply = QMessageBox.question(
                 self, 'Несохраненные изменения',
                 'Есть несохраненные изменения. Сохранить перед выходом?',
@@ -419,7 +581,8 @@ class MainWindow(QMainWindow):
             )
             
             if reply == QMessageBox.Save:
-                self.new_order_view.save_order()
+                if hasattr(self.new_order_view, 'save_order'):
+                    self.new_order_view.save_order()
             elif reply == QMessageBox.Cancel:
                 event.ignore()
                 return
