@@ -273,7 +273,7 @@ class ServiceDialog(QDialog):
             
             if selected_service:
                 # Автозаполнение полей
-                self.base_price_spin.setValue(float(selected_service.price))
+                self.base_price_spin.setValue(float(selected_service.default_price))
                 self.duration_spin.setValue(float(selected_service.duration_hours or 1.0))
                 
                 # Показать описание
@@ -423,18 +423,9 @@ class ServiceDialog(QDialog):
         return True
 
     def save_data(self) -> bool:
-        """
-        Сохранение данных услуги в базу данных.
-        
-        Returns:
-            bool: True если сохранение прошло успешно, False в противном случае
-        """
+        """Сохранение данных услуги в базу данных."""
         if not self.db_session:
-            QMessageBox.critical(
-                self,
-                "Ошибка",
-                "Отсутствует соединение с базой данных."
-            )
+            QMessageBox.critical(self, "Ошибка", "Отсутствует соединение с базой данных.")
             return False
         
         try:
@@ -444,6 +435,17 @@ class ServiceDialog(QDialog):
             quantity = self.quantity_spin.value()
             duration_hours = Decimal(str(self.duration_spin.value()))
             price = Decimal(str(self.base_price_spin.value()))
+            
+            # ИСПРАВЛЕНИЕ: получаем название услуги из каталога
+            service_name = "Услуга"  # значение по умолчанию
+            if service_catalog_id:
+                selected_service = None
+                for service in self.services:
+                    if service.id == service_catalog_id:
+                        selected_service = service
+                        break
+                if selected_service:
+                    service_name = selected_service.name
             
             # Скидка
             discount_amount = None
@@ -461,6 +463,7 @@ class ServiceDialog(QDialog):
             if self.is_edit_mode:
                 # Обновление существующей услуги
                 self.order_service.service_catalog_id = service_catalog_id
+                self.order_service.service_name = service_name  # ИСПРАВЛЕНО
                 self.order_service.employee_id = employee_id
                 self.order_service.quantity = quantity
                 self.order_service.duration_hours = duration_hours
@@ -476,6 +479,7 @@ class ServiceDialog(QDialog):
                 self.order_service = OrderService(
                     order_id=self.order_id,
                     service_catalog_id=service_catalog_id,
+                    service_name=service_name,  # ИСПРАВЛЕНО - теперь заполняется!
                     employee_id=employee_id,
                     quantity=quantity,
                     duration_hours=duration_hours,
@@ -500,23 +504,13 @@ class ServiceDialog(QDialog):
         except SQLAlchemyError as e:
             self.db_session.rollback()
             self.logger.error(f"Ошибка при сохранении услуги: {e}")
-            
-            QMessageBox.critical(
-                self,
-                "Ошибка базы данных",
-                f"Не удалось сохранить услугу:\n{str(e)}"
-            )
+            QMessageBox.critical(self, "Ошибка базы данных", f"Не удалось сохранить услугу:\n{str(e)}")
             return False
         
         except Exception as e:
             self.db_session.rollback()
             self.logger.error(f"Неожиданная ошибка при сохранении услуги: {e}")
-            
-            QMessageBox.critical(
-                self,
-                "Неожиданная ошибка",
-                f"Произошла ошибка при сохранении:\n{str(e)}"
-            )
+            QMessageBox.critical(self, "Неожиданная ошибка", f"Произошла ошибка при сохранении:\n{str(e)}")
             return False
 
     def save_service(self):

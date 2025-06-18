@@ -1,5 +1,5 @@
 # shared_models/common_models.py
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, Float, Date, Numeric
 from sqlalchemy.orm import relationship
 from .base import Base, TimestampMixin
 
@@ -30,10 +30,16 @@ class Car(Base, TimestampMixin):
     client_id = Column(Integer, ForeignKey('clients.id'), nullable=False)
     brand = Column(String(100))
     model = Column(String(100))
+    make = Column(String(100))  # Дублирует brand для совместимости с CarDialog
     year = Column(Integer)
     license_plate = Column(String(50))
     vin = Column(String(50), unique=True, index=True)
     mileage = Column(Integer)
+    color = Column(String(50))           # Добавлено для CarDialog
+    engine_volume = Column(Float)        # Добавлено для CarDialog
+    fuel_type = Column(String(50))       # Добавлено для CarDialog
+    is_active = Column(Integer, default=1)  # Добавлено для CarDialog
+    notes = Column(Text)                 # Добавлено для CarDialog
     
     # Отношения
     client = relationship("Client", back_populates="cars")
@@ -56,75 +62,36 @@ class Car(Base, TimestampMixin):
 
 
 class Employee(Base, TimestampMixin):
-    """Модель сотрудника"""
+    """Расширенная модель сотрудника"""
     __tablename__ = 'employees'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     
-    # Отдельные поля для гибкости
-    first_name = Column(String(100))   # Имя (может быть пустым)
-    last_name = Column(String(100))    # Фамилия (может быть пустым)  
-    middle_name = Column(String(100))  # Отчество (может быть пустым)
-    
-    role = Column(String(50))
+    # Основная информация (для обратной совместимости)
+    name = Column(String(255), nullable=False)
+    role = Column(String(50))  # 'manager', 'master', 'admin'
     phone = Column(String(50))
     email = Column(String(255))
     is_active = Column(Integer, default=1)
     
-    @property
-    def name(self):
-        """Полное ФИО"""
-        parts = []
-        if self.last_name:
-            parts.append(self.last_name)
-        if self.first_name:
-            parts.append(self.first_name)
-        if self.middle_name:
-            parts.append(self.middle_name)
-        
-        if not parts:
-            return f"Сотрудник {self.id}"
-        
-        return " ".join(parts)
+    # Расширенные поля для полноценного управления персоналом
+    first_name = Column(String(100))
+    last_name = Column(String(100))
+    middle_name = Column(String(100))
+    position = Column(String(100))  # Дублирует role для совместимости с диалогами
+    department = Column(String(100))
+    hire_date = Column(Date)
+    hourly_rate = Column(Numeric(10, 2))
     
     @property
-    def short_name(self):
-        """Короткое ФИО: 'Иванов И.И.' или 'Иван'"""
-        if self.last_name:
-            result = self.last_name
-            
-            if self.first_name:
-                result += f" {self.first_name[0]}."
-            
-            if self.middle_name:
-                result += f"{self.middle_name[0]}."
-                
-            return result
-        
-        elif self.first_name:
-            return self.first_name
-        
-        elif self.middle_name:
-            return self.middle_name
-        
-        else:
-            return f"Сотрудник {self.id}"
-    
-    @property
-    def display_name(self):
-        """Имя для отображения в интерфейсе"""
+    def full_name(self):
+        """Полное имя сотрудника"""
         if self.last_name and self.first_name:
-            return f"{self.last_name} {self.first_name}"
-        elif self.last_name:
-            return self.last_name
-        elif self.first_name:
-            return self.first_name
-        else:
-            return f"Сотрудник {self.id}"
-    
-    def has_minimal_info(self):
-        """Проверка минимальной информации"""
-        return bool(self.first_name or self.last_name or self.middle_name)
+            parts = [self.last_name, self.first_name]
+            if self.middle_name:
+                parts.append(self.middle_name)
+            return " ".join(parts)
+        return self.name or "Не указано"
     
     def __repr__(self):
-        return f"<Employee(id={self.id}, name='{self.display_name}', role='{self.role}')>"
+        return f"<Employee(id={self.id}, name='{self.name}', role='{self.role}')>"

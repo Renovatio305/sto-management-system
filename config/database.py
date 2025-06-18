@@ -98,13 +98,15 @@ def init_database():
                 service = ServiceCatalog(
                     name=name,
                     name_ua=name_ua,
-                    price=price,
+                    default_price=price,  # Используем правильное поле
+                    description=None,
                     category=category,
-                    synonyms=synonyms
+                    synonyms=synonyms,
+                    vat_rate=20.0,
+                    duration_hours=1.0,
+                    is_active=1
                 )
                 db.add(service)
-            
-            db.commit()
             
     except Exception as e:
         db.rollback()

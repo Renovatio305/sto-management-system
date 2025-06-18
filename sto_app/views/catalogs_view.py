@@ -333,24 +333,24 @@ class EmployeeDialog(QDialog):
                 employee = Employee()
                 self.db_session.add(employee)
             
+            # ИСПРАВЛЕНИЕ: ОБЯЗАТЕЛЬНО заполняем name ПЕРВЫМ!
+            employee.name = f"{last_name} {first_name}"  # КРИТИЧНО!
             employee.last_name = last_name
             employee.first_name = first_name
             employee.middle_name = self.middle_name_edit.text().strip() or None
             employee.phone = self.phone_edit.text().strip() or None
             employee.email = self.email_edit.text().strip() or None
             employee.position = position
+            employee.role = position  # Дублируем для совместимости
+            employee.department = self.department_combo.currentText().strip() or None
+            employee.hire_date = self.hire_date_edit.date().toPython()
             
-            if hasattr(employee, 'department'):
-                employee.department = self.department_combo.currentText().strip() or None
+            if self.hourly_rate_spin.value() > 0:
+                employee.hourly_rate = Decimal(str(self.hourly_rate_spin.value()))
+            else:
+                employee.hourly_rate = None
             
-            if hasattr(employee, 'hire_date'):
-                employee.hire_date = self.hire_date_edit.date().toPython()
-            
-            if hasattr(employee, 'hourly_rate'):
-                employee.hourly_rate = Decimal(str(self.hourly_rate_spin.value())) if self.hourly_rate_spin.value() > 0 else None
-            
-            if hasattr(employee, 'is_active'):
-                employee.is_active = self.is_active_check.isChecked()
+            employee.is_active = self.is_active_check.isChecked()
             
             self.db_session.commit()
             
@@ -612,7 +612,7 @@ class CatalogsView(QWidget):
                 self.employees_table.setItem(row, 1, QTableWidgetItem(full_name))
                 
                 # Должность
-                self.employees_table.setItem(row, 2, QTableWidgetItem(employee.position or ""))
+                self.employees_table.setItem(row, 2, QTableWidgetItem(employee.role or ""))
                 
                 # Отдел
                 department = ""

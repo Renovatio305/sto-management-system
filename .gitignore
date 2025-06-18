@@ -29,6 +29,7 @@ Thumbs.db
 # Project specific
 sto_database.db
 backup/
+<<<<<<< HEAD
 temp/
 
 # Custom additions
@@ -38,3 +39,6 @@ sto_app.log
 build/
 dist/
 *.egg-info/
+=======
+temp/
+>>>>>>> 0d5c7b73b8c4fd9a23fbcf5e79e5ca7d6f0b81b7

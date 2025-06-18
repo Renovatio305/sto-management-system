@@ -115,26 +115,57 @@ class OrderPart(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     order_id = Column(Integer, ForeignKey('orders.id'), nullable=False)
     
-    # Идентификация запчасти
-    part_number = Column(String(100))       
-    name = Column(String(500), nullable=False) 
-    name_ua = Column(String(500))            
+    # Основная информация
+    name = Column(String(500), nullable=False)  # part_name в диалоге
+    part_number = Column(String(100))           # article в старой модели
+    manufacturer = Column(String(100))          # ДОБАВЛЕНО для part_dialog.py
+    supplier = Column(String(100))              # ДОБАВЛЕНО для part_dialog.py
     
     # Количество и единицы
-    quantity = Column(Float, nullable=False)
     unit = Column(String(20), default='шт')
+    quantity = Column(Integer, nullable=False)
     
-    # Ценообразование
-    unit_price = Column(Float, nullable=False)  
+    # Ценообразование  
+    unit_price = Column(Float, nullable=False)  # price в старой модели
     total = Column(Float)
+    discount_amount = Column(Float, default=0.0)    # ДОБАВЛЕНО для part_dialog.py
+    discount_percent = Column(Float, default=0.0)   # ДОБАВЛЕНО для part_dialog.py
+    
+    # Дополнительная информация
+    description = Column(Text)                  # ДОБАВЛЕНО для part_dialog.py
+    in_stock = Column(Integer, default=1)       # ДОБАВЛЕНО для part_dialog.py
+    is_received = Column(Integer, default=0)    # ДОБАВЛЕНО для part_dialog.py
+    
+    # Совместимость со старыми полями
+    article = Column(String(100))  # алиас для part_number
+    part_name = Column(String(500))  # алиас для name
+    part_name_ua = Column(String(500))
+    price = Column(Float)  # алиас для unit_price
     
     # Отношения
     order = relationship("Order", back_populates="parts")
     
     def calculate_total(self):
         """Рассчитать общую стоимость"""
-        self.total = self.unit_price * self.quantity
-        return self.total
+        if self.unit_price and self.quantity:
+            subtotal = self.unit_price * self.quantity
+            
+            # Применяем скидки
+            if self.discount_amount:
+                self.total = subtotal - self.discount_amount
+            elif self.discount_percent:
+                discount = subtotal * (self.discount_percent / 100)
+                self.total = subtotal - discount
+            else:
+                self.total = subtotal
+                
+            # Обновляем совместимые поля
+            self.price = self.unit_price
+            self.part_name = self.name
+            self.article = self.part_number
+            
+            return max(self.total, 0)
+        return 0
 
 
 class ServiceCatalog(Base, TimestampMixin):
@@ -144,30 +175,16 @@ class ServiceCatalog(Base, TimestampMixin):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(500), unique=True, nullable=False, index=True)
     name_ua = Column(String(500))
-    price = Column(Float, nullable=False)
-    
-    # ✅ ДОБАВЛЕНЫ недостающие поля:
-    description = Column(Text)  # Описание услуги
-    vat_rate = Column(Float, default=20.0)  # Ставка НДС в процентах
-    duration_hours = Column(Float)  # Продолжительность в часах
-    
+    description = Column(Text)
     category = Column(String(100))
-    synonyms = Column(Text)  # Для поиска похожих услуг
+    default_price = Column(Float, nullable=False)  # БАЗОВАЯ цена
+    vat_rate = Column(Float, default=20.0)
+    duration_hours = Column(Float, default=1.0)
+    synonyms = Column(Text)
     is_active = Column(Integer, default=1)
     
-    # ✅ ДОБАВЛЕН property для совместимости с catalogs_view.py:
-    @property
-    def default_price(self):
-        """Алиас для price - для совместимости с существующим кодом"""
-        return self.price
-    
-    @default_price.setter
-    def default_price(self, value):
-        """Сеттер для default_price"""
-        self.price = value
-    
     def __repr__(self):
-        return f"<ServiceCatalog(id={self.id}, name='{self.name}', price={self.price})>"
+        return f"<ServiceCatalog(id={self.id}, name='{self.name}', default_price={self.default_price})>"
 
 
 class CarBrand(Base):

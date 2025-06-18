@@ -3,7 +3,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
                               QLineEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox,
                               QPushButton, QLabel, QDateTimeEdit, QGroupBox, QTableWidget,
                               QTableWidgetItem, QHeaderView, QMessageBox, QSplitter,
-                              QFrame, QCheckBox, QCompleter, QProgressBar, QDialog)
+                              QFrame, QCheckBox, QCompleter, QProgressBar, QScrollArea)  # Добавлен QScrollArea                              
+                              QFrame, QCheckBox, QCompleter, QProgressBar, QScrollArea)  # Добавлен QScrollArea                              
 from PySide6.QtCore import Qt, Signal, QDateTime, QStringListModel, QTimer
 from PySide6.QtGui import QFont, QIcon, QDoubleValidator, QIntValidator
 from sto_app.models_sto import OrderService, OrderPart
@@ -37,18 +38,35 @@ class NewOrderView(QWidget):
         self.is_editing = False
         self.unsaved_changes = False
         
+        # ИСПРАВЛЕНИЕ: инициализируем переменные для выбранных объектов
+        self.selected_client = None
+        self.selected_car = None
+        
         self.setup_ui()
         self.load_initial_data()
         self.setup_connections()
         
         # Автосохранение черновика
         self.autosave_timer = QTimer()
-        self.autosave_timer.timeout.connect(self.save_draft)
-        self.autosave_timer.start(60000)  # Каждую минуту
+        self.autosave_timer.timeout.connect(self.auto_save_draft)
+        self.autosave_timer.start(300000)  # Каждые 5 минут (реже)
         
     def setup_ui(self):
         """Настройка интерфейса"""
-        layout = QVBoxLayout(self)
+        # Создаем главный layout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Создаем область прокрутки
+        from PySide6.QtWidgets import QScrollArea
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        # Создаем контейнер для содержимого
+        scroll_widget = QWidget()
+        layout = QVBoxLayout(scroll_widget)
         layout.setContentsMargins(10, 10, 10, 10)
         
         # Заголовок
@@ -70,14 +88,21 @@ class NewOrderView(QWidget):
         bottom_panel = self.create_services_parts_panel()
         splitter.addWidget(bottom_panel)
         
-        # Устанавливаем пропорции: основная информация - 40%, услуги/запчасти - 60%
+        # Устанавливаем пропорции и ограничения
         splitter.setSizes([300, 450])
-        
+        splitter.setChildrenCollapsible(False)  # Запрещаем полное схлопывание
+        top_panel.setMinimumHeight(250)         # Минимальная высота верхней панели
+        bottom_panel.setMinimumHeight(200)      # Минимальная высота нижней панели
+
         layout.addWidget(splitter)
         
         # Панель действий
         actions_layout = self.create_actions_panel()
         layout.addLayout(actions_layout)
+        
+        # Добавляем содержимое в область прокрутки
+        scroll_area.setWidget(scroll_widget)
+        main_layout.addWidget(scroll_area)
         
     def create_order_info_panel(self):
         """Создание панели основной информации заказа"""
@@ -87,8 +112,27 @@ class NewOrderView(QWidget):
         
         # Горизонтальный сплиттер для левой и правой части
         h_splitter = QSplitter(Qt.Horizontal)
+        h_splitter.setHandleWidth(8)  # Более толстая ручка
+        h_splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #cccccc;
+                border: 1px solid #999999;
+                border-radius: 3px;
+            }
+            QSplitter::handle:hover {
+                background-color: #2196F3;
+            }
+            QSplitter::handle:pressed {
+                background-color: #1976D2;
+            }
+        """)
         
-        # Левая группа - информация о заказе
+        # Левая группа с прокруткой - информация о заказе
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
         order_group = QGroupBox('📋 Информация о заказе')
         order_layout = QFormLayout(order_group)
         
@@ -125,9 +169,17 @@ class NewOrderView(QWidget):
         self.status_combo.addItems([status.value for status in OrderStatus])
         order_layout.addRow('Статус:', self.status_combo)
         
-        h_splitter.addWidget(order_group)
+        left_scroll.setWidget(order_group)
+        left_scroll.setMinimumWidth(300)
+        left_scroll.setMaximumWidth(450)
+        h_splitter.addWidget(left_scroll)
         
-        # Правая группа - клиент и автомобиль
+        # Правая группа с прокруткой - клиент и автомобиль
+        right_scroll = QScrollArea()
+        right_scroll.setWidgetResizable(True)
+        right_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        right_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
         client_car_widget = QWidget()
         client_car_layout = QVBoxLayout(client_car_widget)
         
@@ -206,10 +258,13 @@ class NewOrderView(QWidget):
         
         client_car_layout.addWidget(car_group)
         
-        h_splitter.addWidget(client_car_widget)
+        right_scroll.setWidget(client_car_widget)
+        right_scroll.setMinimumWidth(350)
+        h_splitter.addWidget(right_scroll)
         
-        # Устанавливаем пропорции
+        # Настройки сплиттера
         h_splitter.setSizes([400, 500])
+        h_splitter.setChildrenCollapsible(True)  # Разрешаем схлопывание с улучшенной ручкой
         
         panel_layout.addWidget(h_splitter)
         
@@ -246,6 +301,11 @@ class NewOrderView(QWidget):
         # Панель итогов
         totals_panel = self.create_totals_panel()
         
+        # Настройки сплиттера услуг/запчастей
+        h_splitter.setChildrenCollapsible(False)
+        services_panel.setMinimumWidth(300)
+        parts_panel.setMinimumWidth(300)
+
         panel_layout.addWidget(h_splitter)
         panel_layout.addWidget(totals_panel)
         
@@ -413,7 +473,13 @@ class NewOrderView(QWidget):
         self.clear_btn.setProperty('danger', True)
         self.clear_btn.clicked.connect(self.clear_form)
         actions_layout.addWidget(self.clear_btn)
-        
+
+        # Кнопка сброса расположения
+        self.reset_layout_btn = QPushButton('📐 Сбросить расположение')
+        self.reset_layout_btn.setToolTip('Восстановить исходное расположение панелей')
+        self.reset_layout_btn.clicked.connect(self.reset_layout)
+        actions_layout.addWidget(self.reset_layout_btn)
+
         return actions_layout
         
     def setup_connections(self):
@@ -597,12 +663,61 @@ class NewOrderView(QWidget):
             QMessageBox.information(self, 'Информация', 'Сначала выберите клиента')
             return
             
-        dialog = CarDialog(self, self.selected_client.id)
+        # ИСПРАВЛЕНИЕ: передаем client_id, а не объект Car
+        dialog = CarDialog(self, client_id=self.selected_client.id)
         if dialog.exec():
             # Обновляем поиск с новым автомобилем
             car = dialog.get_car()
-            self.car_search_edit.setText(car.vin or car.license_plate or '')
-            self.selected_car = car
+            if car:
+                self.car_search_edit.setText(car.vin or car.license_plate or '')
+                self.selected_car = car
+
+    
+    def save_draft(self):
+        """Сохранить черновик"""
+        try:
+            # ИСПРАВЛЕНИЕ: проверяем есть ли что сохранять
+            if not self.unsaved_changes:
+                return True
+                
+            if not self.validate_minimal_data():
+                return False
+                
+            # Если это новый заказ, создаём его
+            if not self.current_order:
+                self.current_order = Order()
+                self.current_order.order_number = self.generate_order_number()
+                self.order_number_edit.setText(self.current_order.order_number)
+                
+                # ИСПРАВЛЕНИЕ: добавляем в сессию и делаем flush для получения ID
+                self.db_session.add(self.current_order)
+                self.db_session.flush()
+                
+            # Заполняем основные данные
+            self.fill_order_data()
+            self.current_order.status = OrderStatus.DRAFT
+            
+            # Сохраняем в БД
+            self.db_session.commit()
+            
+            self.unsaved_changes = False
+            title = self.title_label.text().replace(' *', '')
+            self.title_label.setText(title)
+            
+            self.status_message.emit('Черновик сохранён', 2000)
+            return True
+            
+        except Exception as e:
+            self.db_session.rollback()
+            logger.error(f"Ошибка сохранения черновика: {e}")
+            self.status_message.emit(f"Ошибка сохранения черновика: {e}", 3000)
+            return False
+            
+    def auto_save_draft(self):
+        """Автоматическое сохранение черновика"""
+        # Сохраняем только если есть изменения и выбран клиент
+        if self.unsaved_changes and hasattr(self, 'selected_client') and self.selected_client:
+            self.save_draft()            
             
     def add_service(self):
         """Добавление услуги через диалог"""
@@ -916,8 +1031,8 @@ class NewOrderView(QWidget):
             
     def validate_minimal_data(self):
         """Минимальная валидация для черновика"""
+        # ИСПРАВЛЕНИЕ: для черновика клиент не обязателен, просто возвращаем False без алерта
         if not hasattr(self, 'selected_client') or not self.selected_client:
-            QMessageBox.warning(self, 'Предупреждение', 'Выберите клиента')
             return False
             
         return True
@@ -945,10 +1060,10 @@ class NewOrderView(QWidget):
         self.current_order.notes = self.notes_edit.toPlainText()
         
         # Клиент и автомобиль
-        if hasattr(self, 'selected_client'):
+        if hasattr(self, 'selected_client') and self.selected_client:
             self.current_order.client_id = self.selected_client.id
             
-        if hasattr(self, 'selected_car'):
+        if hasattr(self, 'selected_car') and self.selected_car:
             self.current_order.car_id = self.selected_car.id
         else:
             # Создаём новый автомобиль из данных формы
@@ -1327,3 +1442,22 @@ class NewOrderView(QWidget):
                 self.db_session.rollback()
                 logger.error(f"Ошибка удаления запчасти: {e}")
                 QMessageBox.critical(self, 'Ошибка', f'Не удалось удалить запчасть: {e}')
+                
+    def reset_layout(self):
+        """Сброс расположения панелей к исходному состоянию"""
+        try:
+            # Находим все сплиттеры и восстанавливаем их размеры
+            splitters = self.findChildren(QSplitter)
+            
+            for splitter in splitters:
+                if splitter.orientation() == Qt.Vertical:
+                    # Вертикальный сплиттер (основной)
+                    splitter.setSizes([300, 450])
+                else:
+                    # Горизонтальные сплиттеры
+                    splitter.setSizes([400, 500])
+            
+            self.status_message.emit('Расположение панелей восстановлено', 2000)
+            
+        except Exception as e:
+            logger.error(f"Ошибка сброса расположения: {e}")

@@ -40,7 +40,21 @@ class CarDialog(QDialog):
         self.car = car
         self.client_id = client_id
         self.db_session = parent.db_session if parent else None
-        self.is_edit_mode = car is not None
+        
+        # ИСПРАВЛЕНИЕ: если car это int, то это ID, загружаем объект
+        if isinstance(car, int):
+            try:
+                from sqlalchemy import select
+                stmt = select(Car).where(Car.id == car)
+                result = self.db_session.execute(stmt)
+                self.car = result.scalar_one_or_none()
+                self.is_edit_mode = self.car is not None
+            except Exception as e:
+                logger.error(f"Ошибка загрузки автомобиля по ID {car}: {e}")
+                self.car = None
+                self.is_edit_mode = False
+        else:
+            self.is_edit_mode = car is not None
         
         self.setWindowTitle("Редактирование автомобиля" if self.is_edit_mode else "Новый автомобиль")
         self.setModal(True)

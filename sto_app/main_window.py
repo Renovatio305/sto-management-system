@@ -304,7 +304,7 @@ class MainWindow(QMainWindow):
     def show_reports(self):
         """Показать окно отчетов"""
         from .dialogs.reports_dialog import ReportsDialog
-        dialog = ReportsDialog(self, self.db_session)
+        dialog = ReportsDialog(self.db_session, self)
         dialog.exec()
         
     def print_current(self):
