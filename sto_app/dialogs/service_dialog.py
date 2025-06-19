@@ -272,8 +272,8 @@ class ServiceDialog(QDialog):
                     break
             
             if selected_service:
-                # Автозаполнение полей
-                self.base_price_spin.setValue(float(selected_service.default_price))
+                # ✅ ИСПРАВЛЕНО: используем правильные поля модели
+                self.base_price_spin.setValue(float(selected_service.default_price))  # Было: .price
                 self.duration_spin.setValue(float(selected_service.duration_hours or 1.0))
                 
                 # Показать описание

@@ -1,4 +1,6 @@
 # sto_app/main_window.py
+import logging
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                               QTabWidget, QToolBar, QStatusBar, QMessageBox,
                               QSplitter, QLabel, QMenuBar, QMenu)
@@ -323,44 +325,30 @@ class MainWindow(QMainWindow):
             from .dialogs.search_dialog import SearchDialog
             dialog = SearchDialog(self, self.db_session)
             dialog.exec()
-        except ImportError:
-            QMessageBox.information(
-                self, 'Информация', 
-                'Диалог поиска ещё не реализован'
-            )
-        except Exception as e:
-            logger.error(f"Ошибка открытия диалога поиска: {e}")
-            QMessageBox.critical(self, 'Ошибка', f'Не удалось открыть поиск: {e}')
-        
+        except ImportError as e:
+            logger.error(f"Ошибка импорта SearchDialog: {e}")
+            QMessageBox.information(self, 'Информация', 'Функция поиска временно недоступна')
+            
     def show_calendar(self):
         """Показать календарь записей"""
         try:
             from .dialogs.calendar_dialog import CalendarDialog
             dialog = CalendarDialog(self, self.db_session)
             dialog.exec()
-        except ImportError:
-            QMessageBox.information(
-                self, 'Информация', 
-                'Календарь записей ещё не реализован'
-            )
-        except Exception as e:
-            logger.error(f"Ошибка открытия календаря: {e}")
-            QMessageBox.critical(self, 'Ошибка', f'Не удалось открыть календарь: {e}')
-        
+        except ImportError as e:
+            logger.error(f"Ошибка импорта CalendarDialog: {e}")
+            QMessageBox.information(self, 'Информация', 'Календарь записей временно недоступен')
+
     def show_reports(self):
         """Показать окно отчетов"""
         try:
             from .dialogs.reports_dialog import ReportsDialog
             dialog = ReportsDialog(self.db_session, self)
             dialog.exec()
-        except ImportError:
-            QMessageBox.information(
-                self, 'Информация', 
-                'Система отчётов ещё не реализована'
-            )
-        except Exception as e:
-            logger.error(f"Ошибка открытия отчётов: {e}")
-            QMessageBox.critical(self, 'Ошибка', f'Не удалось открыть отчёты: {e}')
+        except ImportError as e:
+            logger.error(f"Ошибка импорта ReportsDialog: {e}")
+            QMessageBox.information(self, 'Информация', 'Система отчетов временно недоступна')
+
         
     def print_current(self):
         """Печать текущего документа"""
@@ -385,30 +373,20 @@ class MainWindow(QMainWindow):
             dialog = ImportDialog(self, self.db_session)
             if dialog.exec():
                 self.refresh_all_views()
-        except ImportError:
-            QMessageBox.information(
-                self, 'Информация', 
-                'Функция импорта ещё не реализована'
-            )
-        except Exception as e:
-            logger.error(f"Ошибка импорта данных: {e}")
-            QMessageBox.critical(self, 'Ошибка', f'Не удалось выполнить импорт: {e}')
-            
+        except ImportError as e:
+            logger.error(f"Ошибка импорта ImportDialog: {e}")
+            QMessageBox.information(self, 'Информация', 'Функция импорта временно недоступна')
+
     def export_data(self):
         """Экспорт данных"""
         try:
             from .dialogs.import_export_dialog import ExportDialog
             dialog = ExportDialog(self, self.db_session)
             dialog.exec()
-        except ImportError:
-            QMessageBox.information(
-                self, 'Информация', 
-                'Функция экспорта ещё не реализована'
-            )
-        except Exception as e:
-            logger.error(f"Ошибка экспорта данных: {e}")
-            QMessageBox.critical(self, 'Ошибка', f'Не удалось выполнить экспорт: {e}')
-            
+        except ImportError as e:
+            logger.error(f"Ошибка импорта ExportDialog: {e}")
+            QMessageBox.information(self, 'Информация', 'Функция экспорта временно недоступна')
+
     def backup_database(self):
         """Резервное копирование БД"""
         try:
@@ -417,15 +395,11 @@ class MainWindow(QMainWindow):
             if backup_manager.create_backup():
                 QMessageBox.information(self, 'Успех', 'Резервная копия создана успешно')
             else:
-                QMessageBox.critical(self, 'Ошибка', 'Не удалось создать резервную копию')
-        except ImportError:
-            QMessageBox.information(
-                self, 'Информация', 
-                'Система резервного копирования ещё не реализована'
-            )
-        except Exception as e:
-            logger.error(f"Ошибка резервного копирования: {e}")
-            QMessageBox.critical(self, 'Ошибка', f'Не удалось создать резервную копию: {e}')
+                QMessageBox.information(self, 'Информация', 
+                                      'Функция резервного копирования будет реализована в следующей версии')
+        except ImportError as e:
+            logger.error(f"Ошибка импорта BackupManager: {e}")
+            QMessageBox.information(self, 'Информация', 'Функция резервного копирования временно недоступна')
             
     def change_theme(self, theme_name):
         """Изменить тему"""
