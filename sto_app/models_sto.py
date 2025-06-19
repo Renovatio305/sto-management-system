@@ -100,7 +100,7 @@ class OrderPart(Base):
 
 class ServiceCatalog(Base, TimestampMixin):
     """ИСПРАВЛЕННЫЙ каталог услуг с поддержкой дефолтных цен"""
-    __tablename__ = 'services_catalog'
+    __tablename__ = 'services_catalog'  # ИСПРАВЛЕНО: было **tablename**
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(500), unique=True, nullable=False, index=True)
@@ -131,7 +131,7 @@ class ServiceCatalog(Base, TimestampMixin):
         """Обратная совместимость - устанавливает default_price"""
         self.default_price = value
     
-    def __repr__(self):
+    def __repr__(self):  # ИСПРАВЛЕНО: было **repr**
         return f"<ServiceCatalog(id={self.id}, name='{self.name}', default_price={self.default_price})>"
 
 

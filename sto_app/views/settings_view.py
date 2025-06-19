@@ -1,34 +1,30 @@
 # sto_app/views/settings_view.py
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-                              QGroupBox, QComboBox, QCheckBox, QPushButton,
-                              QLabel, QSpinBox, QLineEdit, QTextEdit, QSlider,
-                              QFileDialog, QMessageBox, QTabWidget)
-from PySide6.QtCore import Qt, Signal, QSettings
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QFormLayout, 
+                              QComboBox, QPushButton, QLabel, QCheckBox, 
+                              QSpinBox, QLineEdit, QTextEdit, QHBoxLayout)
+from PySide6.QtCore import Signal, QSettings
 from PySide6.QtGui import QFont
-import logging
 
 
 class SettingsView(QWidget):
     """Представление настроек приложения"""
     
-    # ✅ ДОБАВЛЕНЫ недостающие сигналы
-    theme_changed = Signal(str)     # Сигнал смены темы
-    language_changed = Signal(str)  # Сигнал смены языка
-    settings_changed = Signal()     # Сигнал изменения настроек
+    # Сигналы
+    theme_changed = Signal(str)
+    language_changed = Signal(str)
     
-    def __init__(self, parent=None):
+    def __init__(self, db_session=None, parent=None):
         super().__init__(parent)
-        self.logger = logging.getLogger(__name__)
+        self.db_session = db_session
         self.settings = QSettings('STOApp', 'Settings')
         
         self.setup_ui()
         self.load_settings()
-    
+        
     def setup_ui(self):
-        """Настройка интерфейса"""
+        """Настройка интерфейса настроек"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
         
         # Заголовок
         title_label = QLabel('⚙️ Настройки приложения')
@@ -38,333 +34,234 @@ class SettingsView(QWidget):
         title_label.setFont(title_font)
         layout.addWidget(title_label)
         
-        # Табы настроек
-        self.tab_widget = QTabWidget()
+        # Группа интерфейса
+        interface_group = QGroupBox("🎨 Интерфейс")
+        interface_layout = QFormLayout(interface_group)
         
-        # Вкладка интерфейса
-        interface_tab = self.create_interface_tab()
-        self.tab_widget.addTab(interface_tab, '🎨 Интерфейс')
+        # Тема
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(['Светлая', 'Темная'])
+        self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
+        interface_layout.addRow("Тема:", self.theme_combo)
         
-        # Вкладка системы
-        system_tab = self.create_system_tab()
-        self.tab_widget.addTab(system_tab, '💻 Система')
+        # Язык
+        self.language_combo = QComboBox()
+        self.language_combo.addItems(['Украинский', 'Русский', 'English'])
+        self.language_combo.currentTextChanged.connect(self.on_language_changed)
+        interface_layout.addRow("Язык:", self.language_combo)
         
-        # Вкладка резервного копирования
-        backup_tab = self.create_backup_tab()
-        self.tab_widget.addTab(backup_tab, '💾 Резервные копии')
+        # Размер шрифта
+        self.font_size_spin = QSpinBox()
+        self.font_size_spin.setRange(8, 24)
+        self.font_size_spin.setValue(10)
+        self.font_size_spin.valueChanged.connect(self.save_settings)
+        interface_layout.addRow("Размер шрифта:", self.font_size_spin)
         
-        layout.addWidget(self.tab_widget)
+        layout.addWidget(interface_group)
+        
+        # Группа приложения
+        app_group = QGroupBox("📊 Настройки приложения")
+        app_layout = QFormLayout(app_group)
+        
+        # Автосохранение
+        self.autosave_check = QCheckBox("Включить автосохранение")
+        self.autosave_check.setChecked(True)
+        self.autosave_check.stateChanged.connect(self.save_settings)
+        app_layout.addRow(self.autosave_check)
+        
+        # Интервал автосохранения
+        self.autosave_interval_spin = QSpinBox()
+        self.autosave_interval_spin.setRange(1, 60)
+        self.autosave_interval_spin.setValue(5)
+        self.autosave_interval_spin.setSuffix(" мин")
+        self.autosave_interval_spin.valueChanged.connect(self.save_settings)
+        app_layout.addRow("Интервал автосохранения:", self.autosave_interval_spin)
+        
+        # Резервное копирование
+        self.backup_check = QCheckBox("Автоматическое резервное копирование")
+        self.backup_check.setChecked(False)
+        self.backup_check.stateChanged.connect(self.save_settings)
+        app_layout.addRow(self.backup_check)
+        
+        layout.addWidget(app_group)
+        
+        # Группа СТО
+        sto_group = QGroupBox("🔧 Настройки СТО")
+        sto_layout = QFormLayout(sto_group)
+        
+        # Название СТО
+        self.sto_name_edit = QLineEdit()
+        self.sto_name_edit.setPlaceholderText("Название вашего СТО")
+        self.sto_name_edit.textChanged.connect(self.save_settings)
+        sto_layout.addRow("Название СТО:", self.sto_name_edit)
+        
+        # Адрес
+        self.sto_address_edit = QLineEdit()
+        self.sto_address_edit.setPlaceholderText("Адрес СТО")
+        self.sto_address_edit.textChanged.connect(self.save_settings)
+        sto_layout.addRow("Адрес:", self.sto_address_edit)
+        
+        # Телефон
+        self.sto_phone_edit = QLineEdit()
+        self.sto_phone_edit.setPlaceholderText("+380...")
+        self.sto_phone_edit.textChanged.connect(self.save_settings)
+        sto_layout.addRow("Телефон:", self.sto_phone_edit)
+        
+        # НДС по умолчанию
+        self.default_vat_spin = QSpinBox()
+        self.default_vat_spin.setRange(0, 30)
+        self.default_vat_spin.setValue(20)
+        self.default_vat_spin.setSuffix(" %")
+        self.default_vat_spin.valueChanged.connect(self.save_settings)
+        sto_layout.addRow("НДС по умолчанию:", self.default_vat_spin)
+        
+        layout.addWidget(sto_group)
+        
+        # Группа базы данных
+        db_group = QGroupBox("🗄️ База данных")
+        db_layout = QVBoxLayout(db_group)
+        
+        # Информация о БД
+        self.db_info_label = QLabel("SQLite: sto_database.db")
+        self.db_info_label.setStyleSheet("color: #666; font-style: italic;")
+        db_layout.addWidget(self.db_info_label)
+        
+        # Кнопки управления БД
+        db_buttons_layout = QHBoxLayout()
+        
+        self.backup_db_btn = QPushButton("📋 Создать резервную копию")
+        self.backup_db_btn.clicked.connect(self.backup_database)
+        db_buttons_layout.addWidget(self.backup_db_btn)
+        
+        self.restore_db_btn = QPushButton("♻️ Восстановить из копии")
+        self.restore_db_btn.clicked.connect(self.restore_database)
+        db_buttons_layout.addWidget(self.restore_db_btn)
+        
+        self.optimize_db_btn = QPushButton("⚡ Оптимизировать")
+        self.optimize_db_btn.clicked.connect(self.optimize_database)
+        db_buttons_layout.addWidget(self.optimize_db_btn)
+        
+        db_layout.addLayout(db_buttons_layout)
+        
+        layout.addWidget(db_group)
+        
+        # Заполнитель
+        layout.addStretch()
         
         # Кнопки действий
         actions_layout = QHBoxLayout()
         
-        self.save_btn = QPushButton('💾 Сохранить')
-        self.save_btn.clicked.connect(self.save_settings)
-        actions_layout.addWidget(self.save_btn)
-        
-        self.reset_btn = QPushButton('🔄 Сбросить')
+        self.reset_btn = QPushButton("🔄 Сбросить настройки")
+        self.reset_btn.setProperty('danger', True)
         self.reset_btn.clicked.connect(self.reset_settings)
         actions_layout.addWidget(self.reset_btn)
         
         actions_layout.addStretch()
         
+        self.save_btn = QPushButton("💾 Сохранить настройки")
+        self.save_btn.setProperty('accent', True)
+        self.save_btn.clicked.connect(self.save_settings)
+        actions_layout.addWidget(self.save_btn)
+        
         layout.addLayout(actions_layout)
-    
-    def create_interface_tab(self):
-        """Создание вкладки настроек интерфейса"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
         
-        # Группа темы
-        theme_group = QGroupBox('Тема оформления')
-        theme_layout = QFormLayout(theme_group)
+    def on_theme_changed(self, theme_text):
+        """Обработка смены темы"""
+        theme_map = {'Светлая': 'light', 'Темная': 'dark'}
+        theme = theme_map.get(theme_text, 'light')
+        self.save_settings()
+        self.theme_changed.emit(theme)
         
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems(['Светлая', 'Темная', 'Системная'])
-        self.theme_combo.currentTextChanged.connect(self.on_theme_changed)
-        theme_layout.addRow('Тема:', self.theme_combo)
+    def on_language_changed(self, language):
+        """Обработка смены языка"""
+        self.save_settings()
+        self.language_changed.emit(language)
         
-        layout.addWidget(theme_group)
-        
-        # Группа языка
-        language_group = QGroupBox('Язык интерфейса')
-        language_layout = QFormLayout(language_group)
-        
-        self.language_combo = QComboBox()
-        self.language_combo.addItems(['Українська', 'English', 'Русский'])
-        self.language_combo.currentTextChanged.connect(self.on_language_changed)
-        language_layout.addRow('Язык:', self.language_combo)
-        
-        layout.addWidget(language_group)
-        
-        # Группа отображения
-        display_group = QGroupBox('Отображение')
-        display_layout = QFormLayout(display_group)
-        
-        self.show_splash_cb = QCheckBox('Показывать заставку при запуске')
-        self.show_splash_cb.setChecked(True)
-        display_layout.addRow('', self.show_splash_cb)
-        
-        self.show_tips_cb = QCheckBox('Показывать подсказки')
-        self.show_tips_cb.setChecked(True)
-        display_layout.addRow('', self.show_tips_cb)
-        
-        self.animations_cb = QCheckBox('Включить анимации')
-        self.animations_cb.setChecked(True)
-        display_layout.addRow('', self.animations_cb)
-        
-        layout.addWidget(display_group)
-        
-        layout.addStretch()
-        return widget
-    
-    def create_system_tab(self):
-        """Создание вкладки системных настроек"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        # Группа автосохранения
-        autosave_group = QGroupBox('Автосохранение')
-        autosave_layout = QFormLayout(autosave_group)
-        
-        self.autosave_enabled_cb = QCheckBox('Включить автосохранение')
-        self.autosave_enabled_cb.setChecked(True)
-        autosave_layout.addRow('', self.autosave_enabled_cb)
-        
-        self.autosave_interval_spin = QSpinBox()
-        self.autosave_interval_spin.setRange(1, 60)
-        self.autosave_interval_spin.setValue(5)
-        self.autosave_interval_spin.setSuffix(' мин')
-        autosave_layout.addRow('Интервал:', self.autosave_interval_spin)
-        
-        layout.addWidget(autosave_group)
-        
-        # Группа логирования
-        logging_group = QGroupBox('Логирование')
-        logging_layout = QFormLayout(logging_group)
-        
-        self.log_level_combo = QComboBox()
-        self.log_level_combo.addItems(['DEBUG', 'INFO', 'WARNING', 'ERROR'])
-        self.log_level_combo.setCurrentText('INFO')
-        logging_layout.addRow('Уровень логов:', self.log_level_combo)
-        
-        self.log_to_file_cb = QCheckBox('Сохранять логи в файл')
-        self.log_to_file_cb.setChecked(True)
-        logging_layout.addRow('', self.log_to_file_cb)
-        
-        layout.addWidget(logging_group)
-        
-        # Группа производительности
-        performance_group = QGroupBox('Производительность')
-        performance_layout = QFormLayout(performance_group)
-        
-        self.cache_size_spin = QSpinBox()
-        self.cache_size_spin.setRange(10, 1000)
-        self.cache_size_spin.setValue(100)
-        self.cache_size_spin.setSuffix(' МБ')
-        performance_layout.addRow('Размер кэша:', self.cache_size_spin)
-        
-        self.preload_data_cb = QCheckBox('Предзагрузка данных')
-        self.preload_data_cb.setChecked(True)
-        performance_layout.addRow('', self.preload_data_cb)
-        
-        layout.addWidget(performance_group)
-        
-        layout.addStretch()
-        return widget
-    
-    def create_backup_tab(self):
-        """Создание вкладки настроек резервного копирования"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        
-        # Группа автобэкапа
-        autobackup_group = QGroupBox('Автоматическое резервное копирование')
-        autobackup_layout = QFormLayout(autobackup_group)
-        
-        self.autobackup_enabled_cb = QCheckBox('Включить автобэкап')
-        self.autobackup_enabled_cb.setChecked(True)
-        autobackup_layout.addRow('', self.autobackup_enabled_cb)
-        
-        self.backup_interval_spin = QSpinBox()
-        self.backup_interval_spin.setRange(1, 168)
-        self.backup_interval_spin.setValue(24)
-        self.backup_interval_spin.setSuffix(' ч')
-        autobackup_layout.addRow('Интервал:', self.backup_interval_spin)
-        
-        self.backup_path_edit = QLineEdit()
-        self.backup_path_edit.setPlaceholderText('Путь для сохранения резервных копий')
-        backup_path_button = QPushButton('📁 Выбрать')
-        backup_path_button.clicked.connect(self.select_backup_path)
-        
-        backup_path_layout = QHBoxLayout()
-        backup_path_layout.addWidget(self.backup_path_edit)
-        backup_path_layout.addWidget(backup_path_button)
-        autobackup_layout.addRow('Папка:', backup_path_layout)
-        
-        self.max_backups_spin = QSpinBox()
-        self.max_backups_spin.setRange(1, 100)
-        self.max_backups_spin.setValue(30)
-        autobackup_layout.addRow('Макс. копий:', self.max_backups_spin)
-        
-        layout.addWidget(autobackup_group)
-        
-        # Группа ручного управления
-        manual_group = QGroupBox('Ручное управление')
-        manual_layout = QVBoxLayout(manual_group)
-        
-        buttons_layout = QHBoxLayout()
-        
-        create_backup_btn = QPushButton('💾 Создать резервную копию')
-        create_backup_btn.clicked.connect(self.create_backup)
-        buttons_layout.addWidget(create_backup_btn)
-        
-        restore_backup_btn = QPushButton('📥 Восстановить из копии')
-        restore_backup_btn.clicked.connect(self.restore_backup)
-        buttons_layout.addWidget(restore_backup_btn)
-        
-        manual_layout.addLayout(buttons_layout)
-        
-        layout.addWidget(manual_group)
-        
-        layout.addStretch()
-        return widget
-    
-    def on_theme_changed(self, theme_name):
-        """Обработка изменения темы"""
-        theme_map = {
-            'Светлая': 'light',
-            'Темная': 'dark', 
-            'Системная': 'system'
-        }
-        
-        theme_key = theme_map.get(theme_name, 'light')
-        self.theme_changed.emit(theme_key)
-        self.logger.info(f"Тема изменена на: {theme_name}")
-    
-    def on_language_changed(self, language_name):
-        """Обработка изменения языка"""
-        language_map = {
-            'Українська': 'uk_UA',
-            'English': 'en_US',
-            'Русский': 'ru_RU'
-        }
-        
-        language_key = language_map.get(language_name, 'uk_UA')
-        self.language_changed.emit(language_key)
-        self.logger.info(f"Язык изменен на: {language_name}")
-    
-    def select_backup_path(self):
-        """Выбор папки для резервных копий"""
-        path = QFileDialog.getExistingDirectory(
-            self, 
-            'Выберите папку для резервных копий',
-            self.backup_path_edit.text()
-        )
-        
-        if path:
-            self.backup_path_edit.setText(path)
-    
-    def create_backup(self):
-        """Создание резервной копии"""
-        QMessageBox.information(
-            self,
-            'Резервная копия',
-            'Функция создания резервной копии будет реализована'
-        )
-    
-    def restore_backup(self):
-        """Восстановление из резервной копии"""
-        QMessageBox.information(
-            self,
-            'Восстановление',
-            'Функция восстановления будет реализована'
-        )
-    
     def load_settings(self):
         """Загрузка настроек"""
         try:
-            # Интерфейс
+            # Тема
             theme = self.settings.value('theme', 'light')
-            theme_names = {'light': 'Светлая', 'dark': 'Темная', 'system': 'Системная'}
-            self.theme_combo.setCurrentText(theme_names.get(theme, 'Светлая'))
+            theme_text = 'Светлая' if theme == 'light' else 'Темная'
+            index = self.theme_combo.findText(theme_text)
+            if index >= 0:
+                self.theme_combo.setCurrentIndex(index)
+                
+            # Язык
+            language = self.settings.value('language', 'Украинский')
+            index = self.language_combo.findText(language)
+            if index >= 0:
+                self.language_combo.setCurrentIndex(index)
+                
+            # Размер шрифта
+            font_size = int(self.settings.value('font_size', 10))
+            self.font_size_spin.setValue(font_size)
             
-            language = self.settings.value('language', 'uk_UA')
-            language_names = {'uk_UA': 'Українська', 'en_US': 'English', 'ru_RU': 'Русский'}
-            self.language_combo.setCurrentText(language_names.get(language, 'Українська'))
+            # Автосохранение
+            autosave = self.settings.value('autosave', True, type=bool)
+            self.autosave_check.setChecked(autosave)
             
-            # Отображение
-            self.show_splash_cb.setChecked(self.settings.value('show_splash', True, bool))
-            self.show_tips_cb.setChecked(self.settings.value('show_tips', True, bool))
-            self.animations_cb.setChecked(self.settings.value('animations', True, bool))
-            
-            # Система
-            self.autosave_enabled_cb.setChecked(self.settings.value('autosave_enabled', True, bool))
-            self.autosave_interval_spin.setValue(self.settings.value('autosave_interval', 5, int))
-            self.log_level_combo.setCurrentText(self.settings.value('log_level', 'INFO'))
-            self.log_to_file_cb.setChecked(self.settings.value('log_to_file', True, bool))
-            self.cache_size_spin.setValue(self.settings.value('cache_size', 100, int))
-            self.preload_data_cb.setChecked(self.settings.value('preload_data', True, bool))
+            # Интервал автосохранения
+            interval = int(self.settings.value('autosave_interval', 5))
+            self.autosave_interval_spin.setValue(interval)
             
             # Резервное копирование
-            self.autobackup_enabled_cb.setChecked(self.settings.value('autobackup_enabled', True, bool))
-            self.backup_interval_spin.setValue(self.settings.value('backup_interval', 24, int))
-            self.backup_path_edit.setText(self.settings.value('backup_path', ''))
-            self.max_backups_spin.setValue(self.settings.value('max_backups', 30, int))
+            backup = self.settings.value('auto_backup', False, type=bool)
+            self.backup_check.setChecked(backup)
+            
+            # Настройки СТО
+            self.sto_name_edit.setText(self.settings.value('sto_name', ''))
+            self.sto_address_edit.setText(self.settings.value('sto_address', ''))
+            self.sto_phone_edit.setText(self.settings.value('sto_phone', ''))
+            
+            # НДС
+            vat = int(self.settings.value('default_vat', 20))
+            self.default_vat_spin.setValue(vat)
             
         except Exception as e:
-            self.logger.error(f"Ошибка загрузки настроек: {e}")
-    
+            print(f"Ошибка загрузки настроек: {e}")
+            
     def save_settings(self):
         """Сохранение настроек"""
         try:
-            # Интерфейс
-            theme_map = {'Светлая': 'light', 'Темная': 'dark', 'Системная': 'system'}
-            self.settings.setValue('theme', theme_map.get(self.theme_combo.currentText(), 'light'))
+            # Тема
+            theme_text = self.theme_combo.currentText()
+            theme = 'light' if theme_text == 'Светлая' else 'dark'
+            self.settings.setValue('theme', theme)
             
-            language_map = {'Українська': 'uk_UA', 'English': 'en_US', 'Русский': 'ru_RU'}
-            self.settings.setValue('language', language_map.get(self.language_combo.currentText(), 'uk_UA'))
+            # Язык
+            self.settings.setValue('language', self.language_combo.currentText())
             
-            # Отображение
-            self.settings.setValue('show_splash', self.show_splash_cb.isChecked())
-            self.settings.setValue('show_tips', self.show_tips_cb.isChecked())
-            self.settings.setValue('animations', self.animations_cb.isChecked())
+            # Размер шрифта
+            self.settings.setValue('font_size', self.font_size_spin.value())
             
-            # Система
-            self.settings.setValue('autosave_enabled', self.autosave_enabled_cb.isChecked())
+            # Автосохранение
+            self.settings.setValue('autosave', self.autosave_check.isChecked())
             self.settings.setValue('autosave_interval', self.autosave_interval_spin.value())
-            self.settings.setValue('log_level', self.log_level_combo.currentText())
-            self.settings.setValue('log_to_file', self.log_to_file_cb.isChecked())
-            self.settings.setValue('cache_size', self.cache_size_spin.value())
-            self.settings.setValue('preload_data', self.preload_data_cb.isChecked())
             
             # Резервное копирование
-            self.settings.setValue('autobackup_enabled', self.autobackup_enabled_cb.isChecked())
-            self.settings.setValue('backup_interval', self.backup_interval_spin.value())
-            self.settings.setValue('backup_path', self.backup_path_edit.text())
-            self.settings.setValue('max_backups', self.max_backups_spin.value())
+            self.settings.setValue('auto_backup', self.backup_check.isChecked())
             
-            self.settings_changed.emit()
+            # Настройки СТО
+            self.settings.setValue('sto_name', self.sto_name_edit.text())
+            self.settings.setValue('sto_address', self.sto_address_edit.text())
+            self.settings.setValue('sto_phone', self.sto_phone_edit.text())
             
-            QMessageBox.information(self, 'Настройки', 'Настройки сохранены успешно')
-            self.logger.info("Настройки сохранены")
+            # НДС
+            self.settings.setValue('default_vat', self.default_vat_spin.value())
+            
+            # Синхронизация настроек
+            self.settings.sync()
             
         except Exception as e:
-            self.logger.error(f"Ошибка сохранения настроек: {e}")
-            QMessageBox.critical(self, 'Ошибка', f'Не удалось сохранить настройки: {e}')
-    
+            print(f"Ошибка сохранения настроек: {e}")
+            
     def reset_settings(self):
         """Сброс настроек к значениям по умолчанию"""
-        reply = QMessageBox.question(
-            self,
-            'Сброс настроек',
-            'Вы уверены, что хотите сбросить все настройки к значениям по умолчанию?',
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
+        from PySide6.QtWidgets import QMessageBox
         
-        if reply == QMessageBox.Yes:
-            self.settings.clear()
-            self.load_settings()
-            QMessageBox.information(self, 'Настройки', 'Настройки сброшены к значениям по умолчанию')
-            self.logger.info("Настройки сброшены")
+        reply = QMessageBox.question(
+            self, 'Подтверждение',
+            'Сбросить все настройки к значениям по умолчанию?',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
